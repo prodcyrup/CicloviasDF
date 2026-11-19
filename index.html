@@ -152,13 +152,9 @@
       filter: saturate(1.08) contrast(1.02) brightness(1.02);
     }
 
-    .nav-map-rotator {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform-origin: center center;
-      transition: transform 0.35s linear;
-      will-change: transform;
+    /* Native touch panning & pinch-zoom (no CSS rotation distortion) */
+    #navMap {
+      touch-action: none;
     }
 
     @keyframes gpsHaloPulse {
@@ -178,41 +174,40 @@
   <input type="file" id="routePresetInput" accept=".geojson,.json" class="hidden" />
 
   <!-- Top Sticky Header -->
-  <header class="sticky top-0 z-40 border-b border-slate-800/90 bg-slate-950/90 backdrop-blur-md">
-    <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2.5 px-3 py-2.5 sm:px-6">
-      <div class="flex items-center gap-2.5">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/20">
-          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4">
+  <header class="sticky top-0 z-40 border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-6">
+      <div class="flex min-w-0 items-center gap-2">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/20">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4">
             <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
         <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <h1 class="truncate text-sm font-extrabold tracking-tight text-white sm:text-lg">
-              Mobilidade Elétrica DF
+          <div class="flex items-center gap-1.5">
+            <h1 class="truncate text-xs font-extrabold tracking-tight text-white sm:text-base">
+              Ciclovias DF
             </h1>
             <span class="hidden rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-300 md:inline-block">
-              Calibrado • JET 20 km/h = 28 min
+              JET 20 km/h = 28 min
             </span>
           </div>
-          <p class="truncate text-[11px] text-slate-400">
+          <p class="hidden truncate text-[11px] text-slate-400 sm:block">
             Câmara / Três Poderes <span class="text-sky-400">⇄</span> <span id="headerDestLabel" class="font-medium text-slate-200">SHCGN 711 Norte</span>
           </p>
         </div>
       </div>
 
-      <!-- Primary App Tabs (Simulador vs Navegação GPS Android Vertical) -->
-      <nav class="flex items-center rounded-xl border border-slate-800 bg-slate-900 p-1 text-xs shadow-inner">
-        <button type="button" id="tabBtnSimulator"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 font-extrabold text-slate-950 transition">
-          <span>🗺️</span>
-          <span>Simulador</span>
-        </button>
+      <!-- Primary App Tabs (Navegação GPS Default First, Simulador Second) -->
+      <nav class="flex shrink-0 items-center rounded-xl border border-slate-800 bg-slate-900 p-1 text-xs shadow-inner">
         <button type="button" id="tabBtnNavigation"
-          class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white">
+          class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950 transition">
           <span>🧭</span>
           <span>Navegação GPS</span>
-          <span class="rounded-full bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-extrabold uppercase text-emerald-300">JET</span>
+        </button>
+        <button type="button" id="tabBtnSimulator"
+          class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white">
+          <span>🗺️</span>
+          <span>Simulador</span>
         </button>
       </nav>
 
@@ -245,8 +240,8 @@
     </div>
   </header>
 
-  <!-- TAB 1: MAIN SIMULATOR & CATALOG VIEW -->
-  <main id="viewSimulator" class="mx-auto max-w-7xl space-y-8 px-4 py-5 sm:px-6">
+  <!-- TAB 2: SIMULATOR & CATALOG VIEW (Secondary Tab) -->
+  <main id="viewSimulator" class="hidden mx-auto max-w-7xl space-y-8 px-4 py-5 sm:px-6">
 
     <!-- SECTION 1: INTERACTIVE MAP & CALIBRATED SIMULATOR -->
     <section id="simulador" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -337,16 +332,6 @@
                 <input type="checkbox" id="toggleSlowdownPins" checked class="accent-amber-500" />
                 <span>Cruzamentos L2/Eixão/W3</span>
               </label>
-
-              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 font-medium text-rose-300 transition hover:bg-rose-500/20">
-                <input type="checkbox" id="toggleEixao" checked class="accent-rose-500" />
-                <span>Risco Eixão</span>
-              </label>
-
-              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 font-medium text-sky-300 transition hover:bg-sky-500/20">
-                <input type="checkbox" id="toggleParking" checked class="accent-sky-500" />
-                <span>Bicicletários</span>
-              </label>
             </div>
 
             <!-- Destination Switcher -->
@@ -375,10 +360,6 @@
                 <div class="flex items-center gap-2">
                   <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-lime-400"></span>
                   <span>Ciclofaixas / Calçadas</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-rose-500"></span>
-                  <span>Eixão W/L (Alto Risco)</span>
                 </div>
               </div>
             </div>
@@ -655,48 +636,43 @@
     </section>
   </main>
 
-  <!-- TAB 2: ANDROID VERTICAL / HANDLEBAR LIVE GPS NAVIGATION (GOOGLE MAPS & WAZE MODE) -->
-  <section id="viewNavigation" class="hidden relative h-[calc(100dvh-58px)] w-full overflow-hidden bg-slate-950 select-none">
+  <!-- TAB 1 (DEFAULT): ANDROID VERTICAL / HANDLEBAR LIVE GPS NAVIGATION (WAZE & GOOGLE MAPS CLEAN MODE) -->
+  <section id="viewNavigation" class="relative h-[calc(100dvh-52px)] w-full overflow-hidden bg-slate-950 select-none">
 
-    <!-- Full-Viewport Rotatable Map Wrapper -->
+    <!-- Full-Viewport Native Touch Map Container -->
     <div id="navMapViewport" class="relative h-full w-full overflow-hidden bg-slate-950">
-      <div id="navMapRotator" class="nav-map-rotator">
-        <div id="navMap" class="h-full w-full"></div>
-      </div>
+      <div id="navMap" class="h-full w-full"></div>
 
-      <!-- TOP FLOATING TURN-BY-TURN BANNER (Google Maps / Waze Style) -->
-      <div class="pointer-events-none absolute inset-x-0 top-0 z-30 mx-auto max-w-md px-3 pt-3 sm:max-w-lg">
+      <!-- TOP FLOATING TURN-BY-TURN BANNER (Clean Waze / Google Maps Style) -->
+      <div class="pointer-events-none absolute inset-x-0 top-0 z-30 mx-auto max-w-md px-3 pt-2.5 sm:max-w-lg">
         <!-- Main Maneuver Card -->
-        <div id="navManeuverCard" class="pointer-events-auto flex items-center gap-3.5 rounded-2xl border border-emerald-400/40 bg-emerald-950/95 px-4 py-3 text-white shadow-2xl backdrop-blur-md transition">
-          <div id="navManeuverIcon" class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-lg">
-            <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.8">
+        <div id="navManeuverCard" class="pointer-events-auto flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-950/92 px-3.5 py-2.5 text-white shadow-2xl backdrop-blur-md transition">
+          <div id="navManeuverIcon" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-lg">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.8">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
             </svg>
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-baseline justify-between gap-2">
-              <span id="navManeuverDist" class="font-mono text-2xl font-extrabold tracking-tight text-emerald-300">Pronto</span>
+              <span id="navManeuverDist" class="font-mono text-xl font-extrabold tracking-tight text-emerald-300">Pronto</span>
               <span id="navGpsStatusPill" class="rounded-full border border-slate-600/80 bg-slate-900/90 px-2 py-0.5 text-[10px] font-bold text-slate-300">
                 GPS Aguardando
               </span>
             </div>
-            <div id="navManeuverText" class="mt-0.5 truncate text-sm font-bold text-white">
-              Toque em "Iniciar GPS Real" para navegar
+            <div id="navManeuverText" class="truncate text-sm font-bold text-white">
+              Toque em "Iniciar GPS Real"
             </div>
-            <div id="navNextHint" class="mt-0.5 truncate text-[11px] text-emerald-200/80">
+            <div id="navNextHint" class="truncate text-[11px] text-emerald-200/80">
               Trajeto oficial (7,75 km) • Câmara → 711 Norte
             </div>
           </div>
         </div>
 
         <!-- Off-Route Warning Banner (Auto-shown if > 35m off route) -->
-        <div id="navOffRouteBanner" class="pointer-events-auto mt-2 hidden items-center justify-between gap-2 rounded-xl border border-rose-400/70 bg-rose-950/95 px-3.5 py-2 text-xs text-rose-100 shadow-xl backdrop-blur-md">
+        <div id="navOffRouteBanner" class="pointer-events-auto mt-2 hidden items-center justify-between gap-2 rounded-xl border border-rose-400/70 bg-rose-950/95 px-3 py-1.5 text-xs text-rose-100 shadow-xl backdrop-blur-md">
           <div class="flex items-center gap-2">
-            <span class="flex h-6 w-6 shrink-0 animate-pulse items-center justify-center rounded-full bg-rose-500 text-xs font-extrabold text-white">!</span>
-            <div>
-              <div class="font-extrabold text-white">Fora da rota (<span id="navOffRouteMeters" class="font-mono">0 m</span>)</div>
-              <div class="text-[10px] text-rose-200">Siga a linha pontilhada laranja de volta à ciclovia.</div>
-            </div>
+            <span class="flex h-5 w-5 shrink-0 animate-pulse items-center justify-center rounded-full bg-rose-500 text-[10px] font-extrabold text-white">!</span>
+            <div class="font-bold text-white">Fora da rota (<span id="navOffRouteMeters" class="font-mono">0 m</span>)</div>
           </div>
           <button type="button" id="btnNavRecenterAlert" class="shrink-0 rounded-lg bg-rose-500 px-2.5 py-1 text-[10px] font-extrabold text-white">
             Ver Rota
@@ -704,23 +680,17 @@
         </div>
 
         <!-- Upcoming Arterial Crossing Alert Pill -->
-        <div id="navCrossingPill" class="pointer-events-auto mt-2 hidden items-center gap-2 rounded-xl border border-amber-400/50 bg-slate-950/90 px-3 py-1.5 text-[11px] font-bold text-amber-300 shadow-lg backdrop-blur-md">
+        <div id="navCrossingPill" class="pointer-events-auto mt-1.5 hidden items-center gap-2 rounded-xl border border-amber-400/50 bg-slate-950/90 px-3 py-1 text-[11px] font-bold text-amber-300 shadow-lg backdrop-blur-md">
           <span>⚠️</span>
-          <span id="navCrossingText">Atenção: Cruzamento arterial à frente</span>
+          <span id="navCrossingText">Cruzamento à frente</span>
         </div>
       </div>
 
-      <!-- RIGHT FLOATING HANDLEBAR QUICK CONTROLS (Large Android Touch Targets) -->
+      <!-- RIGHT FLOATING HANDLEBAR CONTROLS (Only 3 Essential Uncluttered Buttons) -->
       <div class="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2.5">
         <button type="button" id="btnNavRecenter" title="Centralizar no GPS"
-          class="flex h-12 w-12 items-center justify-center rounded-full border border-sky-400/60 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
+          class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
           🎯
-        </button>
-
-        <button type="button" id="btnNavHeadingToggle" title="Alternar Rotação Waze (Direção Acima) vs Norte"
-          class="flex h-12 w-12 flex-col items-center justify-center rounded-full border border-emerald-400/50 bg-slate-900/95 text-emerald-300 shadow-xl backdrop-blur-md transition active:scale-95">
-          <span class="text-sm leading-none">🧭</span>
-          <span id="navHeadingModeLabel" class="mt-0.5 text-[8px] font-extrabold uppercase">WAZE</span>
         </button>
 
         <button type="button" id="btnNavVoiceToggle" title="Instruções por Voz (PT-BR)"
@@ -728,76 +698,71 @@
           🔊
         </button>
 
-        <button type="button" id="btnNavThemeToggle" title="Alto Contraste Sol / Noite"
+        <button type="button" id="btnNavThemeToggle" title="Modo Sol / Noite"
           class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-amber-300 shadow-xl backdrop-blur-md transition active:scale-95">
           ☀️
-        </button>
-
-        <button type="button" id="btnNavFullscreen" title="Tela Cheia Android"
-          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-base font-bold text-slate-200 shadow-xl backdrop-blur-md transition active:scale-95">
-          ⛶
         </button>
       </div>
 
       <!-- BOTTOM-LEFT WAZE-STYLE SPEEDOMETER BUBBLE -->
-      <div class="pointer-events-none absolute bottom-[188px] left-3 z-30 sm:bottom-[178px]">
-        <div id="navSpeedBubble" class="flex h-[72px] w-[72px] flex-col items-center justify-center rounded-full border-[3px] border-sky-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition">
+      <div class="pointer-events-none absolute bottom-[168px] left-3 z-30">
+        <div id="navSpeedBubble" class="flex h-16 w-16 flex-col items-center justify-center rounded-full border-[3px] border-sky-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition">
           <span id="navSpeedKmh" class="font-mono text-2xl font-extrabold leading-none text-white">0</span>
           <span class="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">km/h</span>
         </div>
-        <div id="navWakeBadge" class="mt-1.5 hidden rounded-full border border-amber-400/40 bg-slate-950/90 px-2 py-0.5 text-center text-[9px] font-bold text-amber-300">
+        <div id="navWakeBadge" class="mt-1 hidden rounded-full border border-amber-400/40 bg-slate-950/90 px-2 py-0.5 text-center text-[9px] font-bold text-amber-300">
           ☀️ Tela Ativa
         </div>
       </div>
 
-      <!-- BOTTOM FLOATING HANDLEBAR DASHBOARD (Android Vertical Ergonomics) -->
-      <div class="absolute inset-x-0 bottom-0 z-30 mx-auto max-w-md px-3 pb-3 sm:max-w-lg">
-        <div class="rounded-2xl border border-slate-700/90 bg-slate-950/95 p-3.5 shadow-2xl backdrop-blur-lg">
+      <!-- BOTTOM FLOATING HANDLEBAR DASHBOARD (Compact Android Vertical Ergonomics) -->
+      <div class="absolute inset-x-0 bottom-0 z-30 mx-auto max-w-md px-3 pb-2.5 sm:max-w-lg">
+        <div class="rounded-2xl border border-slate-700/90 bg-slate-950/95 p-3 shadow-2xl backdrop-blur-lg">
 
           <!-- Route Progress Bar -->
-          <div class="mb-2.5 flex items-center gap-2">
-            <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
+          <div class="mb-2 flex items-center gap-2">
+            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
               <div id="navProgressBar" class="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-300" style="width: 0%"></div>
             </div>
             <span id="navProgressPct" class="font-mono text-[10px] font-bold text-sky-400">0%</span>
           </div>
 
           <!-- Primary ETA / Remaining / Arrival Row -->
-          <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-800">
+          <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
             <div>
               <div class="flex items-baseline gap-2">
                 <span id="navEtaMin" class="font-mono text-2xl font-extrabold text-emerald-400">28 min</span>
                 <span id="navRemainKm" class="font-mono text-sm font-bold text-slate-300">7,75 km</span>
               </div>
               <div class="text-[11px] text-slate-400">
-                Chegada prevista: <strong id="navArrivalClock" class="font-mono text-slate-200">--:--</strong>
-                <span id="navAccuracyLabel" class="ml-1.5 font-mono text-[10px] text-slate-500"></span>
+                Chegada: <strong id="navArrivalClock" class="font-mono text-slate-200">--:--</strong>
+                <span id="navAccuracyLabel" class="ml-1 font-mono text-[10px] text-slate-500"></span>
               </div>
             </div>
 
             <!-- Route Selector & Direction Flip -->
-            <div class="flex flex-col items-end gap-1.5">
+            <div class="flex flex-col items-end gap-1">
               <button type="button" id="btnNavFlipDirection"
                 class="inline-flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-bold text-sky-300 transition active:scale-95">
                 <span>⇄</span>
                 <span id="navDirectionLabel">Ida (711N)</span>
               </button>
-              <select id="navRouteSelect" class="max-w-[165px] truncate rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 focus:border-sky-500 focus:outline-none">
+              <select id="navRouteSelect" class="max-w-[160px] truncate rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 focus:border-sky-500 focus:outline-none">
                 <!-- Populated by JS -->
               </select>
             </div>
           </div>
 
           <!-- Primary Handlebar Action Buttons -->
-          <div class="mt-3 grid grid-cols-12 gap-2">
+          <div class="mt-2.5 grid grid-cols-12 gap-2">
             <button type="button" id="btnNavStartStopGps"
-              class="col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400">
+              class="col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400">
               <span id="navStartStopIcon">🛰️</span>
               <span id="navStartStopLabel">Iniciar GPS Real</span>
             </button>
 
             <button type="button" id="btnNavDemoSim"
-              class="col-span-4 flex items-center justify-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 py-3 text-xs font-extrabold text-amber-300 transition active:scale-[0.98] hover:bg-amber-500 hover:text-slate-950">
+              class="col-span-4 flex items-center justify-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 py-2.5 text-xs font-extrabold text-amber-300 transition active:scale-[0.98] hover:bg-amber-500 hover:text-slate-950">
               <span>🧪</span>
               <span id="navDemoBtnLabel">Testar</span>
             </button>
@@ -1369,28 +1334,16 @@
       { name: 'Transversal 112/711 Norte', type: 'ciclovia', coords: [[-15.75685, -47.87990], [-15.75685, -47.88480], [-15.75705, -47.89025], [-15.75685, -47.89350], [-15.75648, -47.89570]] }
     ];
 
-    const EIXAO_DANGER_LINES = [
-      [[-15.7932, -47.8825], [-15.7862, -47.8831], [-15.7742, -47.8842], [-15.7615, -47.8853], [-15.7470, -47.8866]],
-      [[-15.7932, -47.8819], [-15.7862, -47.8825], [-15.7742, -47.8836], [-15.7615, -47.8847], [-15.7470, -47.8860]]
-    ];
-
-    const PARKING_POINTS = [
-      { name: 'Bicicletário Câmara dos Deputados', coords: [-15.7995, -47.8620], info: 'Partida • Paraciclos cobertos e vigilância 24h.' },
-      { name: 'Bicicletário Rodoviária do Plano Piloto', coords: [-15.7932, -47.8832], info: 'Apoio central e integração Metrô.' },
-      { name: 'Conjunto Nacional (SDN)', coords: [-15.7915, -47.8825], info: 'Bicicletário fechado no subsolo.' },
-      { name: 'Paraciclos UniCEUB (908 Norte)', coords: [-15.7685, -47.8955], info: 'Campus com infraestrutura para micromobilidade.' },
-      { name: 'Destino: 711 Norte / SGAN 912', coords: [-15.7567, -47.8955], info: 'Chegada residencial tranquila na Asa Norte.' }
-    ];
-
     // =========================================================================
     // 2. APPLICATION STATE
     // =========================================================================
     const state = {
-      activeTab: 'simulator', // 'simulator' | 'navigation'
+      activeTab: 'navigation', // Default to Navegação GPS (Android Vertical)
       selectedRouteId: 'rota-oficial',
       customSavedRoute: null, // Loaded from localStorage if available
       gluedRoutes: {}, // { routeId: { coords, distanceKm, source } }
       isGluingRoutes: false,
+      loadedCiclomapaGeojson: null,
       destinationKey: '711n',
       selectedVehicleId: 'jet-aluguel',
       selectedModeIndex: 1,
@@ -1447,9 +1400,7 @@
     let activeTileLayer = null;
     let resolvedCleanProviderIdx = 0;
     let ciclomapaLayerGroup;
-    let eixaoLayerGroup;
     let slowdownLayerGroup;
-    let parkingLayerGroup;
     let activeRouteLayerGroup;
     let drawLayerGroup;
     let draftPreviewLine = null;
@@ -1852,6 +1803,7 @@
       });
 
       rebuildSnapIndex(DEFAULT_CYCLING_LINES);
+      syncNavCiclomapaOverlay();
       const badge = document.getElementById('ciclomapaStatusBadge');
       if (badge) {
         badge.textContent = 'Malha Base Asa Norte';
@@ -1859,9 +1811,47 @@
       }
     }
 
+    function syncNavCiclomapaOverlay() {
+      if (!navCiclomapaGroup) return;
+      navCiclomapaGroup.clearLayers();
+
+      const geojson = state.loadedCiclomapaGeojson;
+      if (geojson && Array.isArray(geojson.features) && geojson.features.length > 0) {
+        for (const feat of geojson.features) {
+          const g = feat.geometry;
+          if (!g) continue;
+          const isLane = feat.properties?.infraType === 'ciclofaixa';
+          const rawLines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+          for (const rawLine of rawLines) {
+            const latLngs = rawLine
+              .filter(pt => Array.isArray(pt) && pt.length >= 2)
+              .map(([lng, lat]) => [lat, lng]);
+            if (latLngs.length < 2) continue;
+            L.polyline(latLngs, {
+              color: isLane ? '#a3e635' : '#10b981',
+              weight: isLane ? 2 : 2.6,
+              opacity: 0.45,
+              dashArray: isLane ? '5, 5' : null,
+              interactive: false
+            }).addTo(navCiclomapaGroup);
+          }
+        }
+      } else {
+        DEFAULT_CYCLING_LINES.forEach(item => {
+          L.polyline(item.coords, {
+            color: '#10b981',
+            weight: 2.5,
+            opacity: 0.35,
+            interactive: false
+          }).addTo(navCiclomapaGroup);
+        });
+      }
+    }
+
     function renderParsedCiclomapaObject(geojson, sourceLabel = 'CicloMapa Importado') {
-      if (!ciclomapaLayerGroup || !geojson || !Array.isArray(geojson.features)) return;
-      ciclomapaLayerGroup.clearLayers();
+      if (!geojson || !Array.isArray(geojson.features)) return;
+      state.loadedCiclomapaGeojson = geojson;
+      if (ciclomapaLayerGroup) ciclomapaLayerGroup.clearLayers();
 
       const snapLines = [];
       for (const feat of geojson.features) {
@@ -1877,22 +1867,47 @@
           if (latLngs.length < 2) continue;
 
           snapLines.push({ name: feat.properties?.name || 'Ciclovia', coords: latLngs });
-          L.polyline(latLngs, {
-            color: isLane ? '#a3e635' : '#10b981',
-            weight: isLane ? 2.6 : 3.2,
-            opacity: 0.72,
-            dashArray: isLane ? '5, 5' : null,
-            lineCap: 'round'
-          }).addTo(ciclomapaLayerGroup);
+          if (ciclomapaLayerGroup) {
+            L.polyline(latLngs, {
+              color: isLane ? '#a3e635' : '#10b981',
+              weight: isLane ? 2.6 : 3.2,
+              opacity: 0.72,
+              dashArray: isLane ? '5, 5' : null,
+              lineCap: 'round'
+            }).addTo(ciclomapaLayerGroup);
+          }
         }
       }
 
       rebuildSnapIndex(snapLines.length > 0 ? snapLines : DEFAULT_CYCLING_LINES);
+      syncNavCiclomapaOverlay();
       const badge = document.getElementById('ciclomapaStatusBadge');
       if (badge) {
         badge.textContent = `${sourceLabel} (${geojson.features.length})`;
         badge.className = 'rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300';
       }
+    }
+
+    // Automatically load CicloMapa GeoJSON hosted alongside index.html in GitHub Pages
+    async function autoFetchHostedCiclomapa() {
+      const candidateFiles = [
+        './ciclomapa-df.geojson',
+        './ciclomapa-Brasília, Distrito Federal, Brasil.geojson'
+      ];
+      for (const fileUrl of candidateFiles) {
+        try {
+          const res = await fetch(encodeURI(fileUrl), { cache: 'default' });
+          if (!res.ok) continue;
+          const raw = await res.json();
+          const filtered = normalizeAndFilterDFGeojson(raw);
+          if (filtered.features.length > 0) {
+            renderParsedCiclomapaObject(filtered, 'CicloMapa GitHub');
+            await saveGeojsonToIDB(filtered);
+            return true;
+          }
+        } catch (e) {}
+      }
+      return false;
     }
 
     function processLocalGeojsonFile(file) {
@@ -2355,20 +2370,7 @@
     }
 
     function renderStaticOverlays() {
-      // Eixão Risk Corridor
-      eixaoLayerGroup.clearLayers();
-      EIXAO_DANGER_LINES.forEach(line => {
-        L.polyline(line, {
-          color: '#f43f5e',
-          weight: 3,
-          opacity: 0.72,
-          dashArray: '8, 8'
-        })
-          .bindTooltip('Eixão W/L (80 km/h — Alto Risco, usar passagens subterrâneas)', { sticky: true })
-          .addTo(eixaoLayerGroup);
-      });
-
-      // Arterial Slowdown Pins
+      // Arterial Slowdown Pins (Clean map: bike parking & Eixão line removed)
       slowdownLayerGroup.clearLayers();
       ARTERIAL_CROSSINGS.forEach(pt => {
         const icon = L.divIcon({
@@ -2386,26 +2388,6 @@
             </div>
           `)
           .addTo(slowdownLayerGroup);
-      });
-
-      // Bike Parking Pins
-      parkingLayerGroup.clearLayers();
-      PARKING_POINTS.forEach(pk => {
-        const icon = L.divIcon({
-          className: 'parking-pin',
-          html: `<div class="flex h-6 w-6 items-center justify-center rounded-lg border-2 border-slate-950 bg-sky-400 text-[10px] font-extrabold text-slate-950 shadow-lg">P</div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        });
-        L.marker(pk.coords, { icon })
-          .bindPopup(`
-            <div class="p-1 max-w-[230px]">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-sky-400">Apoio & Bicicletário</div>
-              <div class="mt-0.5 text-xs font-extrabold text-white">${pk.name}</div>
-              <p class="mt-1 text-[11px] leading-relaxed text-slate-300">${pk.info}</p>
-            </div>
-          `)
-          .addTo(parkingLayerGroup);
       });
     }
 
@@ -2470,16 +2452,16 @@
       map = L.map('map', {
         center: [-15.7785, -47.8820],
         zoom: 13,
-        zoomControl: true
+        zoomControl: true,
+        preferCanvas: true,
+        tap: false
       });
 
       applyBasemapMode(state.activeBasemap);
       probeBestCleanTileProvider();
 
       ciclomapaLayerGroup = L.layerGroup().addTo(map);
-      eixaoLayerGroup = L.layerGroup().addTo(map);
       slowdownLayerGroup = L.layerGroup().addTo(map);
-      parkingLayerGroup = L.layerGroup().addTo(map);
       activeRouteLayerGroup = L.layerGroup().addTo(map);
       drawLayerGroup = L.layerGroup().addTo(map);
 
@@ -3550,33 +3532,32 @@
       if (themeBtn) themeBtn.textContent = state.nav.lightTheme ? '🌙' : '☀️';
     }
 
+    // Rotate only the blue directional GPS chevron (keeping native Leaflet touch pan/pinch 100% accurate)
     function updateNavMapRotation(headingDeg) {
-      const rotator = document.getElementById('navMapRotator');
-      if (!rotator) return;
-      const angle = state.nav.headingUp ? -headingDeg : 0;
-      rotator.style.transform = `translate(-50%, -50%) rotate(${angle.toFixed(1)}deg)`;
-
-      // Keep GPS arrow pointing UP when map rotates (Waze), or rotate arrow to heading when North-Up
       const arrowEl = document.getElementById('navGpsArrowInner');
       if (arrowEl) {
-        const puckAngle = state.nav.headingUp ? 0 : headingDeg;
-        arrowEl.style.transform = `rotate(${puckAngle.toFixed(1)}deg)`;
+        arrowEl.style.transform = `rotate(${headingDeg.toFixed(1)}deg)`;
       }
     }
 
     function initNavMap() {
       if (navMap) {
-        sizeNavRotatorContainer();
+        navMap.invalidateSize();
         refreshNavigationRouteLayer();
         return;
       }
 
-      sizeNavRotatorContainer();
+      // Organic Maps-inspired crisp Canvas rendering & responsive native mobile touch gestures
       navMap = L.map('navMap', {
         center: OFFICIAL_LEAFLET_COORDS[0],
         zoom: 16,
         zoomControl: false,
-        attributionControl: false
+        attributionControl: false,
+        preferCanvas: true,
+        tap: false,
+        touchZoom: true,
+        dragging: true,
+        bounceAtZoomLimits: false
       });
 
       applyNavBasemapTheme();
@@ -3585,22 +3566,16 @@
       navRouteGroup = L.layerGroup().addTo(navMap);
       navCrossingsGroup = L.layerGroup().addTo(navMap);
 
-      // Pause auto-follow if user drags the map manually
-      navMap.on('dragstart', () => {
+      // Pause auto-follow when user pans or pinches manually
+      navMap.on('dragstart zoomstart', () => {
         if (state.nav.isTracking || state.nav.isDemoMode) {
           state.nav.followGps = false;
           updateRecenterBtnVisual();
         }
       });
 
-      // Render subtle ciclovia network & arterial crossings
-      DEFAULT_CYCLING_LINES.forEach(item => {
-        L.polyline(item.coords, {
-          color: '#10b981',
-          weight: 2.5,
-          opacity: 0.35
-        }).addTo(navCiclomapaGroup);
-      });
+      // Render loaded CicloMapa network (or Asa Norte base)
+      syncNavCiclomapaOverlay();
 
       ARTERIAL_CROSSINGS.forEach(pt => {
         const icon = L.divIcon({
@@ -3762,11 +3737,14 @@
       state.nav.currentHeading = effectiveHeading;
       state.nav.accuracyMeters = accuracyM;
 
+      // Gentle magnetic smoothing: snap blue puck to bike lane when within 18m so it stays rock-steady
+      const displayLatLng = proj.offRouteMeters <= 18 ? proj.snappedPoint : [lat, lng];
+
       // Update GPS Marker & Accuracy Halo
-      if (navGpsMarker) navGpsMarker.setLatLng([lat, lng]);
+      if (navGpsMarker) navGpsMarker.setLatLng(displayLatLng);
       if (navAccuracyCircle) {
         navAccuracyCircle.setLatLng([lat, lng]);
-        navAccuracyCircle.setRadius(Math.min(65, Math.max(6, accuracyM || 12)));
+        navAccuracyCircle.setRadius(Math.min(60, Math.max(6, accuracyM || 12)));
       }
 
       // Split Completed vs Remaining Polyline
@@ -3822,11 +3800,11 @@
       const spdBubble = document.getElementById('navSpeedBubble');
       spdEl.textContent = speedKmh;
       if (speedKmh > 32) {
-        spdBubble.className = 'flex h-[72px] w-[72px] flex-col items-center justify-center rounded-full border-[3px] border-rose-500 bg-rose-950/95 shadow-2xl backdrop-blur-md transition';
+        spdBubble.className = 'flex h-16 w-16 flex-col items-center justify-center rounded-full border-[3px] border-rose-500 bg-rose-950/95 shadow-2xl backdrop-blur-md transition';
       } else if (speedKmh > 20) {
-        spdBubble.className = 'flex h-[72px] w-[72px] flex-col items-center justify-center rounded-full border-[3px] border-amber-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition';
+        spdBubble.className = 'flex h-16 w-16 flex-col items-center justify-center rounded-full border-[3px] border-amber-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition';
       } else {
-        spdBubble.className = 'flex h-[72px] w-[72px] flex-col items-center justify-center rounded-full border-[3px] border-sky-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition';
+        spdBubble.className = 'flex h-16 w-16 flex-col items-center justify-center rounded-full border-[3px] border-sky-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition';
       }
 
       // Next Turn-by-Turn Maneuver
@@ -3866,10 +3844,10 @@
         crossingPill.classList.remove('flex');
       }
 
-      // Camera Follow + Waze Heading-Up Rotation
+      // Camera Follow + Directional Chevron Rotation
       updateNavMapRotation(effectiveHeading);
       if (state.nav.followGps) {
-        navMap.setView([lat, lng], Math.max(navMap.getZoom(), 17), { animate: true, duration: 0.35 });
+        navMap.setView(displayLatLng, Math.max(navMap.getZoom(), 17), { animate: true, duration: 0.35 });
       }
     }
 
@@ -4011,20 +3989,20 @@
       const demoLabel = document.getElementById('navDemoBtnLabel');
 
       if (state.nav.isTracking) {
-        btnStart.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-3 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 transition active:scale-[0.98] hover:bg-rose-400';
+        btnStart.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 transition active:scale-[0.98] hover:bg-rose-400';
         iconStart.textContent = '⏹';
         labelStart.textContent = 'Parar Navegação';
       } else {
-        btnStart.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400';
+        btnStart.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400';
         iconStart.textContent = '🛰️';
         labelStart.textContent = 'Iniciar GPS Real';
       }
 
       if (state.nav.isDemoMode) {
-        demoBtn.className = 'col-span-4 flex items-center justify-center gap-1 rounded-xl bg-amber-400 py-3 text-xs font-extrabold text-slate-950 transition active:scale-[0.98]';
+        demoBtn.className = 'col-span-4 flex items-center justify-center gap-1 rounded-xl bg-amber-400 py-2.5 text-xs font-extrabold text-slate-950 transition active:scale-[0.98]';
         demoLabel.textContent = 'Parar';
       } else {
-        demoBtn.className = 'col-span-4 flex items-center justify-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 py-3 text-xs font-extrabold text-amber-300 transition active:scale-[0.98] hover:bg-amber-500 hover:text-slate-950';
+        demoBtn.className = 'col-span-4 flex items-center justify-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 py-2.5 text-xs font-extrabold text-amber-300 transition active:scale-[0.98] hover:bg-amber-500 hover:text-slate-950';
         demoLabel.textContent = 'Testar';
       }
     }
@@ -4044,7 +4022,7 @@
         btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
         setTimeout(() => {
           initNavMap();
-          sizeNavRotatorContainer();
+          if (navMap) navMap.invalidateSize();
           refreshNavigationRouteLayer();
         }, 60);
       } else {
@@ -4090,7 +4068,10 @@
       if (cached && Array.isArray(cached.features) && cached.features.length > 0) {
         renderParsedCiclomapaObject(cached, 'CicloMapa (Cache Auto)');
         updateCacheStatusUI(`Ativo (${cached.features.length} trechos)`);
-      } else {
+        return;
+      }
+      const fetchedFromRepo = await autoFetchHostedCiclomapa();
+      if (!fetchedFromRepo) {
         updateCacheStatusUI('Nenhum arquivo no cache');
       }
     }
@@ -4103,6 +4084,9 @@
       recalculateAll();
       setupDragAndDropGeojson();
       autoLoadCachedCiclomapa();
+
+      // Open directly on Navegação GPS (Default First Tab)
+      switchAppTab('navigation');
 
       // Auto-glue alternative routes gently on startup if not cached yet
       if (Object.keys(state.gluedRoutes).length < 3) {
@@ -4147,13 +4131,6 @@
         }
       });
 
-      document.getElementById('btnNavHeadingToggle').addEventListener('click', () => {
-        state.nav.headingUp = !state.nav.headingUp;
-        document.getElementById('navHeadingModeLabel').textContent = state.nav.headingUp ? 'WAZE' : 'NORTE';
-        updateNavMapRotation(state.nav.currentHeading);
-        showToast('Modo do Mapa', state.nav.headingUp ? 'Rotação dinâmica (Direção Acima • Waze)' : 'Norte fixo para cima');
-      });
-
       document.getElementById('btnNavVoiceToggle').addEventListener('click', () => {
         state.nav.voiceEnabled = !state.nav.voiceEnabled;
         document.getElementById('btnNavVoiceToggle').textContent = state.nav.voiceEnabled ? '🔊' : '🔇';
@@ -4163,14 +4140,6 @@
       document.getElementById('btnNavThemeToggle').addEventListener('click', () => {
         state.nav.lightTheme = !state.nav.lightTheme;
         applyNavBasemapTheme();
-      });
-
-      document.getElementById('btnNavFullscreen').addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen?.().catch(() => {});
-        } else {
-          document.exitFullscreen?.().catch(() => {});
-        }
       });
 
       document.getElementById('btnNavFlipDirection').addEventListener('click', () => {
@@ -4191,7 +4160,7 @@
       });
 
       window.addEventListener('resize', () => {
-        if (state.activeTab === 'navigation') sizeNavRotatorContainer();
+        if (state.activeTab === 'navigation' && navMap) navMap.invalidateSize();
       });
 
       // Basemap Switcher
@@ -4227,12 +4196,6 @@
       });
       document.getElementById('toggleSlowdownPins').addEventListener('change', e => {
         e.target.checked ? slowdownLayerGroup.addTo(map) : map.removeLayer(slowdownLayerGroup);
-      });
-      document.getElementById('toggleEixao').addEventListener('change', e => {
-        e.target.checked ? eixaoLayerGroup.addTo(map) : map.removeLayer(eixaoLayerGroup);
-      });
-      document.getElementById('toggleParking').addEventListener('change', e => {
-        e.target.checked ? parkingLayerGroup.addTo(map) : map.removeLayer(parkingLayerGroup);
       });
 
       // Drawing Mode Controls
