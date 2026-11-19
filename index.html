@@ -155,6 +155,18 @@
     /* Native touch panning & pinch-zoom (no CSS rotation distortion) */
     #navMap {
       touch-action: none;
+      isolation: isolate;
+    }
+
+    /* Map pick-point mode cursor for A->B Route Planner */
+    #map.picking-point,
+    #map.picking-point .leaflet-grab {
+      cursor: copy !important;
+    }
+    #map.picking-point .leaflet-overlay-pane svg path,
+    #map.picking-point .leaflet-marker-pane,
+    #map.picking-point .leaflet-popup-pane {
+      pointer-events: none !important;
     }
 
     @keyframes gpsHaloPulse {
@@ -174,7 +186,7 @@
   <input type="file" id="routePresetInput" accept=".geojson,.json" class="hidden" />
 
   <!-- Top Sticky Header -->
-  <header class="sticky top-0 z-40 border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
+  <header class="sticky top-0 z-[1200] border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
     <div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-6">
       <div class="flex min-w-0 items-center gap-2">
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/20">
@@ -248,6 +260,107 @@
 
       <!-- Left Column (7 cols): Interactive Map + Route Cards -->
       <div class="space-y-4 lg:col-span-7">
+
+        <!-- Smart A -> B Route Planner (Ciclovias + Wide Paved Sidewalks) -->
+        <div class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-xl">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/20 text-xs text-emerald-300">🧭</span>
+              <div>
+                <h2 class="text-xs font-extrabold uppercase tracking-wider text-white">Planejador Inteligente A → B</h2>
+                <p class="text-[11px] text-slate-400">Prioriza ciclovias do CicloMapa DF e calçadas largas pavimentadas</p>
+              </div>
+            </div>
+            <div class="flex items-center rounded-lg border border-slate-800 bg-slate-950 p-0.5 text-[10px]">
+              <button type="button" data-plan-profile="safe" class="plan-profile-btn rounded-md bg-emerald-500 px-2.5 py-1 font-extrabold text-slate-950 transition">
+                🛡️ Ciclovia + Calçada
+              </button>
+              <button type="button" data-plan-profile="direct" class="plan-profile-btn rounded-md px-2.5 py-1 font-semibold text-slate-400 transition hover:text-white">
+                ⚡ Direta
+              </button>
+            </div>
+          </div>
+
+          <datalist id="bsbPlacesList">
+            <option value="Câmara dos Deputados, Brasília"></option>
+            <option value="SHCGN 711 Norte, Brasília"></option>
+            <option value="SGAN 912 Norte, Brasília"></option>
+            <option value="Rodoviária do Plano Piloto, Brasília"></option>
+            <option value="Parque da Cidade Dona Sarah Kubitschek, Brasília"></option>
+            <option value="UnB - Campus Darcy Ribeiro, Brasília"></option>
+            <option value="UniCEUB - 707/907 Norte, Brasília"></option>
+            <option value="Parque Olhos D'Água, Asa Norte, Brasília"></option>
+            <option value="Shopping Conjunto Nacional, Brasília"></option>
+            <option value="Brasília Shopping, Asa Norte"></option>
+            <option value="Torre de TV de Brasília"></option>
+            <option value="Pontão do Lago Sul, Brasília"></option>
+            <option value="Esplanada dos Ministérios, Brasília"></option>
+            <option value="SQN 308 Norte, Brasília"></option>
+            <option value="SQS 308 Sul, Brasília"></option>
+          </datalist>
+
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-12">
+            <!-- Origin Input -->
+            <div class="relative flex items-center gap-1.5 sm:col-span-5">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 font-mono text-xs font-extrabold text-emerald-400">A</span>
+              <input type="text" id="planOriginInput" list="bsbPlacesList"
+                placeholder="Origem (ex: Câmara, SQN 206...)"
+                class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+              <button type="button" id="btnUseGpsOrigin" title="Usar minha localização GPS"
+                class="shrink-0 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10">
+                🛰️
+              </button>
+              <button type="button" id="btnPickOriginMap" title="Marcar Origem no Mapa"
+                class="shrink-0 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-emerald-400 transition hover:border-emerald-500 hover:bg-emerald-500/10">
+                📍
+              </button>
+            </div>
+
+            <!-- Swap Button -->
+            <div class="flex items-center justify-center sm:col-span-1">
+              <button type="button" id="btnSwapOriginDest" title="Inverter Origem e Destino"
+                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-xs font-bold text-slate-300 transition hover:border-sky-500 hover:text-sky-300">
+                ⇄
+              </button>
+            </div>
+
+            <!-- Destination Input -->
+            <div class="relative flex items-center gap-1.5 sm:col-span-6">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/20 font-mono text-xs font-extrabold text-purple-400">B</span>
+              <input type="text" id="planDestInput" list="bsbPlacesList"
+                placeholder="Destino (ex: 711 Norte, UnB, Parque...)"
+                class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none" />
+              <button type="button" id="btnPickDestMap" title="Marcar Destino no Mapa"
+                class="shrink-0 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-purple-400 transition hover:border-purple-500 hover:bg-purple-500/10">
+                📍
+              </button>
+              <button type="button" id="btnCalcSmartRoute"
+                class="shrink-0 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-extrabold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400">
+                Calcular
+              </button>
+            </div>
+          </div>
+
+          <!-- Active Pick-on-Map Hint -->
+          <div id="planPickBanner" class="mt-2 hidden items-center justify-between rounded-xl border border-sky-500/40 bg-sky-500/15 px-3 py-1.5 text-[11px] font-bold text-sky-200">
+            <span id="planPickBannerText">Clique em qualquer ponto do mapa abaixo para definir o local...</span>
+            <button type="button" id="btnCancelPickMap" class="rounded-md bg-slate-950/80 px-2 py-0.5 text-[10px] text-slate-300 hover:text-white">Cancelar</button>
+          </div>
+
+          <!-- Calculated Route Quality Summary Strip -->
+          <div id="planResultStrip" class="mt-3 hidden flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/35 bg-emerald-950/35 px-3 py-2 text-[11px]">
+            <div class="flex flex-wrap items-center gap-2">
+              <span id="planResultSummary" class="font-bold text-white">Rota calculada</span>
+              <span id="planCyclePctBadge" class="rounded-md bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300">0% Ciclovia Real</span>
+              <span id="planSidewalkBadge" class="rounded-md bg-sky-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-sky-300">Calçadas & Vias Calmas</span>
+            </div>
+            <button type="button" id="btnLaunchPlannedNav"
+              class="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-extrabold text-slate-950 transition hover:bg-emerald-400">
+              <span>🧭</span>
+              <span>Navegar GPS</span>
+            </button>
+          </div>
+        </div>
 
         <!-- Map Card with Drag & Drop GeoJSON support -->
         <div id="mapCardDropzone" class="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl transition">
@@ -641,10 +754,10 @@
 
     <!-- Full-Viewport Native Touch Map Container -->
     <div id="navMapViewport" class="relative h-full w-full overflow-hidden bg-slate-950">
-      <div id="navMap" class="h-full w-full"></div>
+      <div id="navMap" class="relative z-0 h-full w-full"></div>
 
       <!-- TOP FLOATING TURN-BY-TURN BANNER (Clean Waze / Google Maps Style) -->
-      <div class="pointer-events-none absolute inset-x-0 top-0 z-30 mx-auto max-w-md px-3 pt-2.5 sm:max-w-lg">
+      <div class="pointer-events-none absolute inset-x-0 top-0 z-[1000] mx-auto max-w-md px-3 pt-2.5 sm:max-w-lg">
         <!-- Main Maneuver Card -->
         <div id="navManeuverCard" class="pointer-events-auto flex items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-950/92 px-3.5 py-2.5 text-white shadow-2xl backdrop-blur-md transition">
           <div id="navManeuverIcon" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-lg">
@@ -687,7 +800,7 @@
       </div>
 
       <!-- RIGHT FLOATING HANDLEBAR CONTROLS (Only 3 Essential Uncluttered Buttons) -->
-      <div class="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2.5">
+      <div class="absolute right-3 top-1/2 z-[1000] flex -translate-y-1/2 flex-col gap-2.5">
         <button type="button" id="btnNavRecenter" title="Centralizar no GPS"
           class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
           🎯
@@ -705,7 +818,7 @@
       </div>
 
       <!-- BOTTOM-LEFT WAZE-STYLE SPEEDOMETER BUBBLE -->
-      <div class="pointer-events-none absolute bottom-[168px] left-3 z-30">
+      <div class="pointer-events-none absolute bottom-[168px] left-3 z-[1000]">
         <div id="navSpeedBubble" class="flex h-16 w-16 flex-col items-center justify-center rounded-full border-[3px] border-sky-400 bg-slate-950/95 shadow-2xl backdrop-blur-md transition">
           <span id="navSpeedKmh" class="font-mono text-2xl font-extrabold leading-none text-white">0</span>
           <span class="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">km/h</span>
@@ -716,7 +829,7 @@
       </div>
 
       <!-- BOTTOM FLOATING HANDLEBAR DASHBOARD (Compact Android Vertical Ergonomics) -->
-      <div class="absolute inset-x-0 bottom-0 z-30 mx-auto max-w-md px-3 pb-2.5 sm:max-w-lg">
+      <div class="absolute inset-x-0 bottom-0 z-[1000] mx-auto max-w-md px-3 pb-2.5 sm:max-w-lg">
         <div class="rounded-2xl border border-slate-700/90 bg-slate-950/95 p-3 shadow-2xl backdrop-blur-lg">
 
           <!-- Route Progress Bar -->
@@ -774,7 +887,7 @@
   </section>
 
   <!-- Drive / URL GeoJSON Sync Modal -->
-  <div id="driveModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+  <div id="driveModal" class="fixed inset-0 z-[1300] hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
     <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
       <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
         <div>
@@ -828,7 +941,7 @@
   </div>
 
   <!-- Toast Notification -->
-  <div id="toastBox" class="pointer-events-none fixed bottom-5 right-5 z-50 translate-y-6 opacity-0 transition-all duration-300">
+  <div id="toastBox" class="pointer-events-none fixed bottom-5 right-5 z-[1400] translate-y-6 opacity-0 transition-all duration-300">
     <div class="flex max-w-sm items-start gap-2.5 rounded-xl border border-sky-500/40 bg-slate-900/95 px-4 py-3 text-xs text-white shadow-2xl backdrop-blur-md">
       <span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-sky-400"></span>
       <div>
@@ -1341,6 +1454,13 @@
       activeTab: 'navigation', // Default to Navegação GPS (Android Vertical)
       selectedRouteId: 'rota-oficial',
       customSavedRoute: null, // Loaded from localStorage if available
+      plannedRoute: null, // Smart A->B planned route (Ciclovias + Wide Sidewalks)
+      planner: {
+        profile: 'safe', // 'safe' (ciclovia + wide sidewalk) | 'direct'
+        originCoords: null,
+        destCoords: null,
+        pickingTarget: null // null | 'origin' | 'dest'
+      },
       gluedRoutes: {}, // { routeId: { coords, distanceKm, source } }
       isGluingRoutes: false,
       loadedCiclomapaGeojson: null,
@@ -1495,6 +1615,9 @@
 
     function getAllRoutes() {
       const routes = [];
+      if (state.plannedRoute) {
+        routes.push(state.plannedRoute);
+      }
       if (state.customSavedRoute) {
         routes.push(state.customSavedRoute);
       }
@@ -1520,7 +1643,7 @@
       const base = all.find(r => r.id === state.selectedRouteId) || all[0];
       const dest = DESTINATIONS[state.destinationKey] || DESTINATIONS['711n'];
 
-      if (state.destinationKey === '912n' && !base.isCustom) {
+      if (state.destinationKey === '912n' && !base.isCustom && !base.isPlanned) {
         const extendedCoords = [...base.coords, dest.coords];
         return {
           ...base,
@@ -2428,7 +2551,7 @@
 
       const endIcon = L.divIcon({
         className: 'route-end-badge',
-        html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">${DESTINATIONS[state.destinationKey].label}</div>`,
+        html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">${route.destLabel || DESTINATIONS[state.destinationKey].label}</div>`,
         iconSize: [120, 20],
         iconAnchor: [60, -4]
       });
@@ -2469,8 +2592,275 @@
       renderStaticOverlays();
       drawSelectedRouteOnMap();
 
-      map.on('click', handleMapClickDraw);
+      map.on('click', (e) => {
+        if (state.planner.pickingTarget) {
+          handleMapPickOriginDest(e);
+          return;
+        }
+        handleMapClickDraw(e);
+      });
       map.on('mousemove', handleMapMouseMoveDraw);
+    }
+
+    // =========================================================================
+    // 8B. SMART A -> B ROUTE PLANNER (CICLOVIAS + WIDE PAVED SIDEWALKS)
+    // =========================================================================
+    const KNOWN_BSB_PLACES = {
+      'câmara dos deputados, brasília': [-15.799000, -47.862554],
+      'shcgn 711 norte, brasília': [-15.756483, -47.895700],
+      'sgan 912 norte, brasília': [-15.752400, -47.899200],
+      'rodoviária do plano piloto, brasília': [-15.793400, -47.882800],
+      'parque da cidade dona sarah kubitschek, brasília': [-15.800700, -47.907800],
+      'unb - campus darcy ribeiro, brasília': [-15.763400, -47.870700],
+      'uniceub - 707/907 norte, brasília': [-15.767600, -47.894200],
+      "parque olhos d'água, asa norte, brasília": [-15.743800, -47.886100],
+      'shopping conjunto nacional, brasília': [-15.791600, -47.882600],
+      'brasília shopping, asa norte': [-15.786600, -47.888900],
+      'torre de tv de brasília': [-15.790500, -47.892800],
+      'pontão do lago sul, brasília': [-15.826600, -47.872600],
+      'esplanada dos ministérios, brasília': [-15.796600, -47.872500],
+      'sqn 308 norte, brasília': [-15.764600, -47.889500],
+      'sqs 308 sul, brasília': [-15.818500, -47.903500]
+    };
+
+    function setPlannerPickMode(target) {
+      state.planner.pickingTarget = target;
+      const mapEl = document.getElementById('map');
+      const banner = document.getElementById('planPickBanner');
+      const bannerTxt = document.getElementById('planPickBannerText');
+
+      if (target) {
+        if (state.isDrawing) toggleCustomDrawMode(false);
+        mapEl.classList.add('picking-point');
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        bannerTxt.textContent = target === 'origin'
+          ? 'Clique no mapa abaixo para marcar a Origem (Ponto A)'
+          : 'Clique no mapa abaixo para marcar o Destino (Ponto B)';
+      } else {
+        mapEl.classList.remove('picking-point');
+        banner.classList.add('hidden');
+        banner.classList.remove('flex');
+      }
+    }
+
+    function handleMapPickOriginDest(e) {
+      const target = state.planner.pickingTarget;
+      const pt = [+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)];
+      const label = `${pt[0].toFixed(5)}, ${pt[1].toFixed(5)}`;
+
+      if (target === 'origin') {
+        state.planner.originCoords = pt;
+        document.getElementById('planOriginInput').value = `Mapa (${label})`;
+      } else {
+        state.planner.destCoords = pt;
+        document.getElementById('planDestInput').value = `Mapa (${label})`;
+      }
+      setPlannerPickMode(null);
+      showToast(target === 'origin' ? 'Origem Marcada (A)' : 'Destino Marcado (B)', 'Clique em "Calcular" para gerar a rota segura.');
+    }
+
+    async function resolvePlaceToCoords(rawInput, cachedCoords) {
+      const txt = (rawInput || '').trim();
+      if (!txt) return null;
+
+      // 1. Direct coordinate pair or "Mapa (lat, lng)"
+      const coordMatch = txt.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+      if (coordMatch) {
+        return [parseFloat(coordMatch[1]), parseFloat(coordMatch[2])];
+      }
+      if (cachedCoords && txt.startsWith('Mapa (')) {
+        return cachedCoords;
+      }
+
+      // 2. Instant Brasília preset match
+      const lower = txt.toLowerCase();
+      if (KNOWN_BSB_PLACES[lower]) return KNOWN_BSB_PLACES[lower];
+      for (const [k, v] of Object.entries(KNOWN_BSB_PLACES)) {
+        if (k.includes(lower) || lower.includes(k.split(',')[0])) return v;
+      }
+
+      // 3. Nominatim OpenStreetMap geocoding scoped to Brasília / DF
+      const query = lower.includes('brasília') || lower.includes('brasilia') || lower.includes('df')
+        ? txt
+        : `${txt}, Brasília, DF, Brasil`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&viewbox=-48.25,-15.50,-47.35,-16.05&bounded=1&q=${encodeURIComponent(query)}`;
+      try {
+        const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    // Score a candidate route by real CicloMapa coverage + paved wide sidewalks / cycleway steps
+    function scoreCandidateSmartRoute(osrmRoute) {
+      const rawCoords = osrmRoute?.geometry?.coordinates || [];
+      const coords = rawCoords.map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
+      const dense = densifyPolyline(coords, 45);
+
+      let onCycleCount = 0;
+      for (const pt of dense) {
+        const snap = findNearestCycleSnap(pt[0], pt[1], 36);
+        if (snap) onCycleCount++;
+      }
+      const cyclePct = dense.length > 0 ? Math.round((onCycleCount / dense.length) * 100) : 0;
+
+      // Analyze OSRM step classes for wide sidewalks/footways/paths vs busy arterial streets
+      let calmMeters = 0;
+      let totalStepMeters = Math.max(1, osrmRoute.distance || 1);
+      const legs = osrmRoute.legs || [];
+      for (const leg of legs) {
+        for (const step of (leg.steps || [])) {
+          const mode = step.mode || '';
+          const name = String(step.name || '').toLowerCase();
+          if (
+            mode === 'pushing bike' ||
+            name.includes('ciclo') ||
+            name.includes('parque') ||
+            name.includes('calçad') ||
+            name.includes('passarela') ||
+            name.includes('sqn') ||
+            name.includes('sqs') ||
+            name.includes('cln') ||
+            name.includes('cls') ||
+            name === ''
+          ) {
+            calmMeters += step.distance || 0;
+          }
+        }
+      }
+      const calmPct = Math.min(100, Math.max(cyclePct, Math.round((calmMeters / totalStepMeters) * 100)));
+      const distanceKm = +(osrmRoute.distance / 1000).toFixed(2);
+
+      // Composite safety score: heavily rewards CicloMapa ciclovias & calm/sidewalk paths with modest distance penalty
+      const safeScore = (cyclePct * 1.45) + (calmPct * 0.55) - (distanceKm * 4.5);
+
+      return { coords, distanceKm, cyclePct, calmPct, safeScore };
+    }
+
+    async function fetchOSRMCandidates(waypoints) {
+      const coordStr = waypoints.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
+      const url = `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?overview=full&geometries=geojson&alternatives=true&steps=true`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8500);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) return [];
+        const json = await res.json();
+        return Array.isArray(json.routes) ? json.routes : [];
+      } catch (e) {
+        clearTimeout(timer);
+        return [];
+      }
+    }
+
+    async function calculateSmartOriginDestRoute() {
+      const originTxt = document.getElementById('planOriginInput').value.trim();
+      const destTxt = document.getElementById('planDestInput').value.trim();
+      const btn = document.getElementById('btnCalcSmartRoute');
+
+      if (!originTxt || !destTxt) {
+        showToast('Informe Origem e Destino', 'Digite um endereço/quadra de Brasília ou use os botões 📍 no mapa.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Buscando...';
+
+      try {
+        const [origPt, destPt] = await Promise.all([
+          resolvePlaceToCoords(originTxt, state.planner.originCoords),
+          resolvePlaceToCoords(destTxt, state.planner.destCoords)
+        ]);
+
+        if (!origPt || !destPt) {
+          showToast('Endereço não encontrado', 'Tente incluir a quadra (ex: SQN 308, CLN 206) ou clique em 📍 para marcar direto no mapa.');
+          return;
+        }
+
+        state.planner.originCoords = origPt;
+        state.planner.destCoords = destPt;
+
+        // 1. Fetch direct + alternative bicycle/sidewalk routes from OSRM
+        const rawCandidates = await fetchOSRMCandidates([origPt, destPt]);
+
+        // 2. In "Ciclovia + Calçada Larga" mode, also probe a route anchored onto the nearest real CicloMapa midpoint
+        if (state.planner.profile === 'safe' && state.cyclingSegments.length > 0) {
+          const midLat = (origPt[0] + destPt[0]) / 2;
+          const midLng = (origPt[1] + destPt[1]) / 2;
+          const nearMidCycle = findNearestCycleSnap(midLat, midLng, 1400);
+          if (nearMidCycle) {
+            const cycleAnchored = await fetchOSRMCandidates([origPt, nearMidCycle.point, destPt]);
+            rawCandidates.push(...cycleAnchored);
+          }
+        }
+
+        if (rawCandidates.length === 0) {
+          showToast('Serviço de Rotas Indisponível', 'Não foi possível consultar o roteador OSM agora. Tente novamente em instantes.');
+          return;
+        }
+
+        const scored = rawCandidates.map(scoreCandidateSmartRoute);
+        const minDistKm = Math.min(...scored.map(s => s.distanceKm));
+
+        // Pick best route according to selected profile (never exceed 1.32x direct distance)
+        let best;
+        if (state.planner.profile === 'safe') {
+          const reasonable = scored.filter(s => s.distanceKm <= Math.max(minDistKm * 1.32, minDistKm + 1.2));
+          best = (reasonable.length > 0 ? reasonable : scored).sort((a, b) => b.safeScore - a.safeScore)[0];
+        } else {
+          best = scored.sort((a, b) => a.distanceKm - b.distanceKm)[0];
+        }
+
+        // Gentle snap onto real CicloMapa segments where within 28m for crisp bike-lane alignment
+        const refinedCoords = best.coords.map(pt => {
+          const hit = findNearestCycleSnap(pt[0], pt[1], 28);
+          return hit ? [+hit.point[0].toFixed(6), +hit.point[1].toFixed(6)] : pt;
+        });
+
+        const shortOrigin = originTxt.split(',')[0].slice(0, 18);
+        const shortDest = destTxt.split(',')[0].slice(0, 18);
+
+        state.plannedRoute = {
+          id: 'rota-planejada-ab',
+          shortTitle: `🧭 ${shortOrigin} → ${shortDest}`,
+          tag: state.planner.profile === 'safe' ? 'Ciclovia + Calçada' : 'Rota Direta',
+          isPlanned: true,
+          isOfficial: false,
+          destLabel: shortDest,
+          distanceKm: best.distanceKm,
+          description: `Rota calculada de ${originTxt} até ${destTxt} (${best.cyclePct}% em ciclovias do CicloMapa DF + ${Math.max(0, best.calmPct - best.cyclePct)}% em calçadas largas/vias calmas).`,
+          coords: refinedCoords
+        };
+
+        state.selectedRouteId = state.plannedRoute.id;
+        resetPlayback();
+        drawSelectedRouteOnMap();
+        recalculateAll();
+        if (map && refinedCoords.length >= 2) {
+          map.fitBounds(L.latLngBounds(refinedCoords), { padding: [40, 40] });
+        }
+        if (navMap) refreshNavigationRouteLayer();
+
+        // Update result strip UI
+        const strip = document.getElementById('planResultStrip');
+        strip.classList.remove('hidden');
+        strip.classList.add('flex');
+        const m = computeRouteMetrics(state.plannedRoute, getSelectedVehicle(), state.cruiseVelocity, state.riderWeightKg, false, state.includeSlowdowns);
+        document.getElementById('planResultSummary').textContent = `${best.distanceKm.toFixed(2).replace('.', ',')} km • ${m.oneWayMin} min`;
+        document.getElementById('planCyclePctBadge').textContent = `${best.cyclePct}% Ciclovia CicloMapa`;
+        document.getElementById('planSidewalkBadge').textContent = `${best.calmPct}% Trecho Seguro / Calçadas`;
+
+        showToast('Rota Segura Calculada!', `${best.distanceKm.toFixed(2).replace('.', ',')} km (${best.cyclePct}% em ciclovia real). Pronta para Navegação GPS!`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Calcular';
+      }
     }
 
     // =========================================================================
@@ -4099,6 +4489,56 @@
       // Main App Tab Switcher (Simulador vs Navegação GPS Android Vertical)
       document.getElementById('tabBtnSimulator').addEventListener('click', () => switchAppTab('simulator'));
       document.getElementById('tabBtnNavigation').addEventListener('click', () => switchAppTab('navigation'));
+
+      // Smart A -> B Route Planner Events
+      document.querySelectorAll('.plan-profile-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.planner.profile = btn.dataset.planProfile;
+          document.querySelectorAll('.plan-profile-btn').forEach(b => {
+            b.className = 'plan-profile-btn rounded-md px-2.5 py-1 font-semibold text-slate-400 transition hover:text-white';
+          });
+          btn.className = 'plan-profile-btn rounded-md bg-emerald-500 px-2.5 py-1 font-extrabold text-slate-950 transition';
+        });
+      });
+
+      document.getElementById('btnPickOriginMap').addEventListener('click', () => setPlannerPickMode('origin'));
+      document.getElementById('btnPickDestMap').addEventListener('click', () => setPlannerPickMode('dest'));
+      document.getElementById('btnCancelPickMap').addEventListener('click', () => setPlannerPickMode(null));
+
+      document.getElementById('btnSwapOriginDest').addEventListener('click', () => {
+        const origIn = document.getElementById('planOriginInput');
+        const destIn = document.getElementById('planDestInput');
+        const tmpVal = origIn.value;
+        origIn.value = destIn.value;
+        destIn.value = tmpVal;
+        const tmpC = state.planner.originCoords;
+        state.planner.originCoords = state.planner.destCoords;
+        state.planner.destCoords = tmpC;
+      });
+
+      document.getElementById('btnUseGpsOrigin').addEventListener('click', () => {
+        if (!('geolocation' in navigator)) {
+          showToast('GPS Indisponível', 'Digite sua origem ou use 📍 no mapa.');
+          return;
+        }
+        showToast('Obtendo GPS...', 'Buscando sua localização atual para a Origem (A).');
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const pt = [+pos.coords.latitude.toFixed(6), +pos.coords.longitude.toFixed(6)];
+            state.planner.originCoords = pt;
+            document.getElementById('planOriginInput').value = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
+            showToast('Origem GPS Definida!', 'Agora informe o Destino (B) e clique em Calcular.');
+          },
+          () => showToast('Sem Sinal GPS', 'Ative a localização ou marque a origem no mapa (📍).'),
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+      });
+
+      document.getElementById('btnCalcSmartRoute').addEventListener('click', calculateSmartOriginDestRoute);
+      document.getElementById('btnLaunchPlannedNav').addEventListener('click', () => {
+        state.nav.reversed = false;
+        switchAppTab('navigation');
+      });
 
       // Route Gluing Button
       document.getElementById('btnGlueRoutes').addEventListener('click', () => {
