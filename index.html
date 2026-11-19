@@ -177,6 +177,37 @@
     .gps-puck-pulse {
       animation: gpsHaloPulse 1.8s ease-out infinite;
     }
+
+    @keyframes dangerPulse {
+      0% { transform: scale(0.9); opacity: 0.85; }
+      75% { transform: scale(1.75); opacity: 0; }
+      100% { transform: scale(1.75); opacity: 0; }
+    }
+    .danger-crossing-pulse {
+      animation: dangerPulse 1.9s ease-out infinite;
+    }
+
+    /* Google Maps-style draggable route customization handles (large touch target for Android) */
+    .route-edit-handle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      touch-action: none;
+    }
+    .route-edit-handle:active {
+      cursor: grabbing;
+    }
+    .route-edit-handle-dot {
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .route-edit-handle:hover .route-edit-handle-dot,
+    .route-edit-handle:active .route-edit-handle-dot {
+      transform: scale(1.22);
+    }
+    #map.editing-route .leaflet-overlay-pane svg path.editable-route-hit {
+      cursor: pointer !important;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
@@ -354,11 +385,18 @@
               <span id="planCyclePctBadge" class="rounded-md bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300">0% Ciclovia Real</span>
               <span id="planSidewalkBadge" class="rounded-md bg-sky-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-sky-300">Calçadas & Vias Calmas</span>
             </div>
-            <button type="button" id="btnLaunchPlannedNav"
-              class="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-extrabold text-slate-950 transition hover:bg-emerald-400">
-              <span>🧭</span>
-              <span>Navegar GPS</span>
-            </button>
+            <div class="flex items-center gap-1.5">
+              <button type="button" id="btnAdjustPlannedRoute"
+                class="inline-flex items-center gap-1 rounded-lg border border-sky-400/50 bg-sky-500/20 px-2.5 py-1 text-[11px] font-bold text-sky-200 transition hover:bg-sky-500 hover:text-slate-950">
+                <span>✋</span>
+                <span>Ajustar Pontos</span>
+              </button>
+              <button type="button" id="btnLaunchPlannedNav"
+                class="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1 text-[11px] font-extrabold text-slate-950 transition hover:bg-emerald-400">
+                <span>🧭</span>
+                <span>Navegar GPS</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -379,6 +417,13 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
+              <!-- Google Maps-Style Drag/Edit Route Toggle Button -->
+              <button type="button" id="btnToggleRouteEdit"
+                class="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950">
+                <span>✋</span>
+                <span id="routeEditBtnLabel">Ajustar Rota</span>
+              </button>
+
               <!-- Draw Custom Route Toggle Button -->
               <button type="button" id="btnToggleDrawMode"
                 class="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500 hover:text-slate-950">
@@ -394,6 +439,33 @@
                 <button type="button" data-basemap="light" class="basemap-btn rounded-lg px-2.5 py-1 font-medium text-slate-400 transition hover:text-white">Claro</button>
                 <button type="button" data-basemap="cyclosm" class="basemap-btn rounded-lg px-2.5 py-1 font-medium text-slate-400 transition hover:text-white">CyclOSM</button>
               </div>
+            </div>
+          </div>
+
+          <!-- Interactive Route Adjustment Toolbar (Google Maps Drag-to-Customize Mode) -->
+          <div id="routeEditToolbar" class="hidden flex-wrap items-center justify-between gap-2 border-b border-sky-500/40 bg-sky-950/45 px-4 py-2.5 text-xs">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 font-bold text-sky-200">
+                <span class="h-2 w-2 animate-pulse rounded-full bg-sky-400"></span>
+                <span>Arraste os pontos brancos</span>
+              </span>
+              <span class="text-[11px] text-slate-300">ou toque na linha azul para criar um desvio</span>
+              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-slate-950/90 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                <input type="checkbox" id="toggleEditSnapCycle" checked class="accent-emerald-500" />
+                <span>🧲 Imã Ciclovia</span>
+              </label>
+              <span id="routeEditStatusPill" class="hidden rounded-md bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">Recalculando...</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button type="button" id="btnEditUndo" class="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800">
+                ↶ Desfazer
+              </button>
+              <button type="button" id="btnEditSave" class="rounded-lg bg-emerald-500 px-3 py-1 text-[11px] font-extrabold text-slate-950 shadow transition hover:bg-emerald-400">
+                💾 Salvar Rota
+              </button>
+              <button type="button" id="btnEditDone" class="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-slate-200 transition hover:bg-slate-800">
+                Concluir
+              </button>
             </div>
           </div>
 
@@ -441,9 +513,9 @@
                 <span>Malha CicloMapa</span>
               </label>
 
-              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 font-medium text-amber-300 transition hover:bg-amber-500/20">
-                <input type="checkbox" id="toggleSlowdownPins" checked class="accent-amber-500" />
-                <span>Cruzamentos L2/Eixão/W3</span>
+              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 font-semibold text-rose-200 transition hover:bg-rose-500/25">
+                <input type="checkbox" id="toggleSlowdownPins" checked class="accent-rose-500" />
+                <span>⚠️ Travessias Perigosas</span>
               </label>
             </div>
 
@@ -793,9 +865,12 @@
         </div>
 
         <!-- Upcoming Arterial Crossing Alert Pill -->
-        <div id="navCrossingPill" class="pointer-events-auto mt-1.5 hidden items-center gap-2 rounded-xl border border-amber-400/50 bg-slate-950/90 px-3 py-1 text-[11px] font-bold text-amber-300 shadow-lg backdrop-blur-md">
-          <span>⚠️</span>
-          <span id="navCrossingText">Cruzamento à frente</span>
+        <div id="navCrossingPill" class="pointer-events-auto mt-1.5 hidden items-center gap-2.5 rounded-xl border-2 border-rose-500/80 bg-rose-950/95 px-3 py-2 text-xs text-rose-100 shadow-2xl backdrop-blur-md">
+          <span class="flex h-7 w-7 shrink-0 animate-pulse items-center justify-center rounded-lg bg-rose-500 text-sm font-extrabold text-white shadow">⚠️</span>
+          <div class="min-w-0 flex-1">
+            <div id="navCrossingText" class="truncate font-extrabold text-white">TRAVESSIA PERIGOSA À FRENTE</div>
+            <div id="navCrossingSubtext" class="truncate text-[10px] font-medium text-rose-200">Reduza a velocidade e olhe os dois lados</div>
+          </div>
         </div>
       </div>
 
@@ -806,9 +881,9 @@
           🎯
         </button>
 
-        <button type="button" id="btnNavVoiceToggle" title="Instruções por Voz (PT-BR)"
-          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-white shadow-xl backdrop-blur-md transition active:scale-95">
-          🔊
+        <button type="button" id="btnNavVoiceToggle" title="Áudio desligado (toque para ativar voz PT-BR)"
+          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-slate-400 shadow-xl backdrop-blur-md transition active:scale-95">
+          🔇
         </button>
 
         <button type="button" id="btnNavThemeToggle" title="Modo Sol / Noite"
@@ -1026,52 +1101,104 @@
     // Major Brasília arterial crossings where ciclovias intersect fast avenues
     const ARTERIAL_CROSSINGS = [
       {
-        id: 'l2-norte',
-        name: 'Cruzamento L2 Norte',
+        id: 'l2-norte-esplanada',
+        name: 'Travessia L2 Norte (Esplanada/SBN)',
+        shortTag: 'L2',
+        danger: 'alta',
         coords: [-15.7918, -47.8758],
         radiusMeters: 420,
         delaySec: 40,
-        note: 'Semáforo e conversão da Via N1 para a Ciclovia L2 Norte / SBN.'
+        note: 'Semáforo de alto fluxo e conversão da Via N1 para a Ciclovia L2 Norte / SBN.'
+      },
+      {
+        id: 'l2-norte-406',
+        name: 'Travessia Via L2 Norte (406/408N)',
+        shortTag: 'L2',
+        danger: 'alta',
+        coords: [-15.7715, -47.8758],
+        radiusMeters: 360,
+        delaySec: 35,
+        note: 'Faixa/cruzamento na Via L2 Norte com carros em alta velocidade. Reduza e aguarde abertura total.'
+      },
+      {
+        id: 'l2-norte-410',
+        name: 'Travessia Via L2 Norte (410/412N)',
+        shortTag: 'L2',
+        danger: 'alta',
+        coords: [-15.7582, -47.8794],
+        radiusMeters: 360,
+        delaySec: 35,
+        note: 'Cruzamento da L2 Norte próximo ao acesso da UnB / 112 Norte.'
       },
       {
         id: 'eixao-travessia',
-        name: 'Travessia Eixão (L/W)',
+        name: 'Travessia Eixão Norte (102/104N)',
+        shortTag: 'EIXÃO',
+        danger: 'alta',
         coords: [-15.7830, -47.8832],
         radiusMeters: 520,
         delaySec: 80,
-        note: 'Desaceleração na rampa / passagem subterrânea do Eixão Norte (102/104N ou 110/112N).'
+        note: 'Atenção máxima: rampa e passagem subterrânea do Eixão (80 km/h). Desça devagar.'
+      },
+      {
+        id: 'eixao-108n',
+        name: 'Passagem Eixão Norte (106/108N)',
+        shortTag: 'EIXÃO',
+        danger: 'alta',
+        coords: [-15.7685, -47.8848],
+        radiusMeters: 420,
+        delaySec: 70,
+        note: 'Acesso à passagem inferior do Eixão Norte (106/108N). Atenção nas entradas dos eixinhos.'
       },
       {
         id: 'eixao-110n',
-        name: 'Passagem Eixão 110/112N',
+        name: 'Passagem Eixão Norte (110/112N)',
+        shortTag: 'EIXÃO',
+        danger: 'alta',
         coords: [-15.7574, -47.8832],
         radiusMeters: 450,
         delaySec: 75,
-        note: 'Passagem subterrânea do Eixão na altura da 110/112 Norte.'
+        note: 'Passagem subterrânea do Eixão na 110/112N — cuidado com carros entrando nos eixinhos.'
       },
       {
         id: 'w3-norte',
-        name: 'Semáforo Av. W3 Norte',
+        name: 'Travessia Av. W3 Norte (702/704N)',
+        shortTag: 'W3',
+        danger: 'alta',
         coords: [-15.7805, -47.8902],
         radiusMeters: 480,
         delaySec: 55,
-        note: 'Travessia semafórica da Av. W3 Norte (fluxo de ônibus e carros).'
+        note: 'Cruzamento perigoso na Av. W3 Norte com faixa exclusiva de ônibus e múltiplos semáforos.'
+      },
+      {
+        id: 'w3-708n',
+        name: 'Travessia Av. W3 Norte (708/710N)',
+        shortTag: 'W3',
+        danger: 'alta',
+        coords: [-15.7662, -47.8914],
+        radiusMeters: 360,
+        delaySec: 50,
+        note: 'Travessia semafórica na W3 Norte com ônibus rápidos — atravesse somente no verde.'
       },
       {
         id: 'w3-711n',
-        name: 'Semáforo W3 (711/112N)',
+        name: 'Travessia Av. W3 Norte (711/112N)',
+        shortTag: 'W3',
+        danger: 'alta',
         coords: [-15.7570, -47.8910],
         radiusMeters: 380,
         delaySec: 55,
-        note: 'Cruzamento da W3 Norte próximo à 711/712 Norte.'
+        note: 'Cruzamento da Av. W3 Norte próximo à 711/712 Norte (fluxo pesado de ônibus).'
       },
       {
         id: 'w4-w5-uniceub',
         name: 'Trecho W4/W5 & UniCEUB',
+        shortTag: 'PEDESTRES',
+        danger: 'media',
         coords: [-15.7680, -47.8945],
         radiusMeters: 550,
         delaySec: 45,
-        note: 'Redução de velocidade em cruzamentos locais, raízes e fluxo de pedestres no UniCEUB.'
+        note: 'Redução de velocidade em cruzamentos locais, raízes no asfalto e fluxo de pedestres no UniCEUB.'
       }
     ];
 
@@ -1482,7 +1609,16 @@
       drawnPoints: [],
       drawUndoStack: [], // Stores previous drawnPoints.length before each click
       cyclingSegments: [], // Indexed segments with bboxes for fast snapping
-      cycleGraph: null, // Lightweight endpoint adjacency graph for magnetic routing
+      cycleGraph: null, // Spatial CicloMapa graph for A* real-ciclovia routing
+
+      // Interactive Google Maps-Style Route Editor State
+      routeEditor: {
+        isEditing: false,
+        snapToCycle: true,
+        anchors: [], // [{ lat, lng, isEndpoint }]
+        undoStack: [],
+        isRecalculating: false
+      },
 
       // Playback State
       playback: {
@@ -1502,7 +1638,7 @@
         reversed: false, // false = Ida (Câmara -> 711N), true = Volta (711N -> Câmara)
         followGps: true,
         headingUp: true, // Waze-style direction-up rotation
-        voiceEnabled: true,
+        voiceEnabled: false, // OFF by default per user preference
         lightTheme: false,
         currentPos: null,
         currentHeading: 0,
@@ -1523,6 +1659,7 @@
     let slowdownLayerGroup;
     let activeRouteLayerGroup;
     let drawLayerGroup;
+    let routeEditLayerGroup;
     let draftPreviewLine = null;
     let snapPreviewRing = null;
     let riderMarker = null;
@@ -1906,6 +2043,245 @@
         }
       }
       state.cyclingSegments = segments;
+      state.cycleGraph = buildCycleGraph(lineEntries);
+    }
+
+    // Build an in-memory CicloMapa spatial graph so route planning stays ON real green ciclovias
+    function buildCycleGraph(lineEntries) {
+      const GRID_DEG = 0.00014; // ~15m snapping cell to stitch touching/crossing ciclovias
+      const nodes = []; // { id, lat, lng, edges: [{ to, cost, isBridge }] }
+      const cellToNodeId = new Map();
+      const spatialBuckets = new Map();
+      const BUCKET_DEG = 0.0011; // ~120m bucket for fast nearest-node & crossing-bridge lookup
+
+      function getOrCreateNode(lat, lng) {
+        const gx = Math.round(lat / GRID_DEG);
+        const gy = Math.round(lng / GRID_DEG);
+        const key = `${gx},${gy}`;
+        let id = cellToNodeId.get(key);
+        if (id === undefined) {
+          id = nodes.length;
+          nodes.push({ id, lat, lng, edges: [], deg: 0 });
+          cellToNodeId.set(key, id);
+
+          const bx = Math.floor(lat / BUCKET_DEG);
+          const by = Math.floor(lng / BUCKET_DEG);
+          const bKey = `${bx},${by}`;
+          if (!spatialBuckets.has(bKey)) spatialBuckets.set(bKey, []);
+          spatialBuckets.get(bKey).push(id);
+        }
+        return id;
+      }
+
+      function addEdge(u, v, cost, isBridge = false) {
+        if (u === v) return;
+        const edgesU = nodes[u].edges;
+        for (let i = 0; i < edgesU.length; i++) {
+          if (edgesU[i].to === v) {
+            if (cost < edgesU[i].cost) {
+              edgesU[i].cost = cost;
+              edgesU[i].isBridge = isBridge;
+            }
+            return;
+          }
+        }
+        edgesU.push({ to: v, cost, isBridge });
+        nodes[u].deg++;
+      }
+
+      // 1. Add all real CicloMapa polyline edges with strong preference (0.40x weight)
+      for (const entry of lineEntries) {
+        const coords = entry.coords;
+        if (!Array.isArray(coords) || coords.length < 2) continue;
+        let prevId = getOrCreateNode(coords[0][0], coords[0][1]);
+        for (let i = 1; i < coords.length; i++) {
+          const curId = getOrCreateNode(coords[i][0], coords[i][1]);
+          if (curId !== prevId) {
+            const dist = haversineMeters(nodes[prevId].lat, nodes[prevId].lng, nodes[curId].lat, nodes[curId].lng);
+            if (dist > 0 && dist < 450) {
+              const weight = dist * 0.40;
+              addEdge(prevId, curId, weight, false);
+              addEdge(curId, prevId, weight, false);
+            }
+            prevId = curId;
+          }
+        }
+      }
+
+      // 2. Add short intersection / crosswalk bridges (<= 95m) from ciclovia endpoints & sparse junctions
+      // so disjoint ciclovias across avenues (L2, W3, N1, transversais) link cleanly
+      for (let u = 0; u < nodes.length; u++) {
+        const nu = nodes[u];
+        if (nu.deg > 2) continue; // Endpoints & simple points need bridging across gaps
+        const bx = Math.floor(nu.lat / BUCKET_DEG);
+        const by = Math.floor(nu.lng / BUCKET_DEG);
+        let bestNeighbors = [];
+
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const list = spatialBuckets.get(`${bx + dx},${by + dy}`);
+            if (!list) continue;
+            for (let k = 0; k < list.length; k++) {
+              const v = list[k];
+              if (v === u) continue;
+              const nv = nodes[v];
+              const d = haversineMeters(nu.lat, nu.lng, nv.lat, nv.lng);
+              if (d <= 95) {
+                bestNeighbors.push({ v, d });
+              }
+            }
+          }
+        }
+
+        bestNeighbors.sort((a, b) => a.d - b.d);
+        const cap = Math.min(3, bestNeighbors.length);
+        for (let j = 0; j < cap; j++) {
+          const { v, d } = bestNeighbors[j];
+          const bridgeCost = d * 1.9 + 24;
+          addEdge(u, v, bridgeCost, true);
+          addEdge(v, u, bridgeCost, true);
+        }
+      }
+
+      return { nodes, spatialBuckets, bucketDeg: BUCKET_DEG };
+    }
+
+    function findNearestCycleGraphNodes(lat, lng, maxMeters = 950, limit = 6) {
+      const g = state.cycleGraph;
+      if (!g || g.nodes.length === 0) return [];
+      const bx = Math.floor(lat / g.bucketDeg);
+      const by = Math.floor(lng / g.bucketDeg);
+      const radiusCells = Math.min(8, Math.ceil(maxMeters / 115));
+      const found = [];
+
+      for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+        for (let dy = -radiusCells; dy <= radiusCells; dy++) {
+          const list = g.spatialBuckets.get(`${bx + dx},${by + dy}`);
+          if (!list) continue;
+          for (let i = 0; i < list.length; i++) {
+            const id = list[i];
+            const n = g.nodes[id];
+            const d = haversineMeters(lat, lng, n.lat, n.lng);
+            if (d <= maxMeters) found.push({ id, dist: d });
+          }
+        }
+      }
+
+      found.sort((a, b) => a.dist - b.dist);
+      return found.slice(0, limit);
+    }
+
+    // Fast A* on the real CicloMapa graph (prefers green ciclovias over parallel car lanes like L2)
+    function findCycleGraphPath(origPt, destPt) {
+      const g = state.cycleGraph;
+      if (!g || g.nodes.length < 4) return null;
+
+      const startNodes = findNearestCycleGraphNodes(origPt[0], origPt[1], 900, 6);
+      const goalNodes = findNearestCycleGraphNodes(destPt[0], destPt[1], 900, 6);
+      if (startNodes.length === 0 || goalNodes.length === 0) return null;
+
+      const goalCostMap = new Map();
+      goalNodes.forEach(gn => goalCostMap.set(gn.id, gn.dist * 1.45));
+
+      const N = g.nodes.length;
+      const gScore = new Float64Array(N).fill(Infinity);
+      const parent = new Int32Array(N).fill(-1);
+      const closed = new Uint8Array(N);
+
+      // Minimal binary min-heap for fast mobile A*
+      const heap = [];
+      const pushHeap = (id, f) => {
+        heap.push({ id, f });
+        let idx = heap.length - 1;
+        while (idx > 0) {
+          const p = (idx - 1) >> 1;
+          if (heap[p].f <= heap[idx].f) break;
+          const tmp = heap[p]; heap[p] = heap[idx]; heap[idx] = tmp;
+          idx = p;
+        }
+      };
+      const popHeap = () => {
+        const top = heap[0];
+        const last = heap.pop();
+        if (heap.length > 0) {
+          heap[0] = last;
+          let idx = 0;
+          while (true) {
+            let l = (idx << 1) + 1, r = l + 1, s = idx;
+            if (l < heap.length && heap[l].f < heap[s].f) s = l;
+            if (r < heap.length && heap[r].f < heap[s].f) s = r;
+            if (s === idx) break;
+            const tmp = heap[idx]; heap[idx] = heap[s]; heap[s] = tmp;
+            idx = s;
+          }
+        }
+        return top;
+      };
+
+      const heuristic = (id) => {
+        const n = g.nodes[id];
+        return haversineMeters(n.lat, n.lng, destPt[0], destPt[1]) * 0.40;
+      };
+
+      for (const sn of startNodes) {
+        const initG = sn.dist * 1.45;
+        if (initG < gScore[sn.id]) {
+          gScore[sn.id] = initG;
+          pushHeap(sn.id, initG + heuristic(sn.id));
+        }
+      }
+
+      let bestGoalId = -1;
+      let bestTotalCost = Infinity;
+      let expanded = 0;
+      const MAX_EXPANSIONS = 12000;
+
+      while (heap.length > 0 && expanded < MAX_EXPANSIONS) {
+        const cur = popHeap();
+        if (cur.f >= bestTotalCost) break;
+        if (closed[cur.id]) continue;
+        closed[cur.id] = 1;
+        expanded++;
+
+        if (goalCostMap.has(cur.id)) {
+          const total = gScore[cur.id] + goalCostMap.get(cur.id);
+          if (total < bestTotalCost) {
+            bestTotalCost = total;
+            bestGoalId = cur.id;
+          }
+        }
+
+        const edges = g.nodes[cur.id].edges;
+        for (let i = 0; i < edges.length; i++) {
+          const e = edges[i];
+          if (closed[e.to]) continue;
+          const tentativeG = gScore[cur.id] + e.cost;
+          if (tentativeG < gScore[e.to]) {
+            gScore[e.to] = tentativeG;
+            parent[e.to] = cur.id;
+            pushHeap(e.to, tentativeG + heuristic(e.to));
+          }
+        }
+      }
+
+      if (bestGoalId === -1) return null;
+
+      const pathIds = [];
+      let curr = bestGoalId;
+      while (curr !== -1) {
+        pathIds.push(curr);
+        curr = parent[curr];
+      }
+      pathIds.reverse();
+      if (pathIds.length < 2) return null;
+
+      const coords = pathIds.map(id => [+g.nodes[id].lat.toFixed(6), +g.nodes[id].lng.toFixed(6)]);
+      const distKm = computePathDistanceKm(coords);
+      const directKm = Math.max(0.15, haversineMeters(origPt[0], origPt[1], destPt[0], destPt[1]) / 1000);
+      // Reject wildly detoured paths
+      if (distKm > Math.max(directKm * 2.15, directKm + 1.6)) return null;
+
+      return { coords, distKm };
     }
 
     function renderDefaultCiclomapaLayer() {
@@ -2434,8 +2810,8 @@
       }
 
       if (mode === 'cyclosm') {
-        const cyc = CLEAN_TILE_PROVIDERS[CLEAN_TILE_PROVIDERS.length - 1];
-        activeTileLayer = L.tileLayer(cyc.url, cyc.options).addTo(map);
+        const cyclosmProv = CLEAN_TILE_PROVIDERS[CLEAN_TILE_PROVIDERS.length - 1];
+        activeTileLayer = L.tileLayer(cyclosmProv.url, cyclosmProv.options).addTo(map);
         if (badgeEl) badgeEl.textContent = 'CyclOSM';
         return;
       }
@@ -2445,68 +2821,111 @@
 
       if (mode === 'dark') {
         mapEl.classList.add(provider.id === 'cyclosm-fallback' ? 'basemap-waze-dark-cyclosm' : 'basemap-waze-dark');
-        if (badgeEl) badgeEl.textContent = `${provider.label} • Escuro`;
       } else {
         mapEl.classList.add('basemap-waze-light');
-        if (badgeEl) badgeEl.textContent = `${provider.label} • Claro`;
       }
 
-      let errorCount = 0;
-      let switchedOnErr = false;
+      if (badgeEl) badgeEl.textContent = provider.label;
+
+      let tileErrors = 0;
       const layer = L.tileLayer(provider.url, provider.options);
       layer.on('tileerror', () => {
-        errorCount++;
-        if (!switchedOnErr && errorCount >= 3 && idx + 1 < CLEAN_TILE_PROVIDERS.length) {
-          switchedOnErr = true;
+        tileErrors++;
+        if (tileErrors >= 3 && idx + 1 < CLEAN_TILE_PROVIDERS.length && activeTileLayer === layer) {
           resolvedCleanProviderIdx = idx + 1;
           applyBasemapMode(state.activeBasemap, resolvedCleanProviderIdx);
+          if (navMap) applyNavBasemapTheme();
         }
       });
+
       activeTileLayer = layer.addTo(map);
     }
 
     function probeBestCleanTileProvider() {
-      const checkImage = (url) => new Promise((resolve) => {
+      let current = 0;
+      function testNext() {
+        if (current >= CLEAN_TILE_PROVIDERS.length) return;
+        const prov = CLEAN_TILE_PROVIDERS[current];
         const img = new Image();
-        let done = false;
-        const finish = (ok) => {
-          if (done) return;
-          done = true;
+        const timer = setTimeout(() => {
+          img.onload = img.onerror = null;
+          current++;
+          testNext();
+        }, 3200);
+        img.onload = () => {
           clearTimeout(timer);
-          resolve(ok);
-        };
-        const timer = setTimeout(() => finish(false), 3200);
-        img.onload = () => finish(img.naturalWidth > 0);
-        img.onerror = () => finish(false);
-        img.src = url;
-      });
-
-      Promise.all(CLEAN_TILE_PROVIDERS.map(p => checkImage(p.probeUrl))).then(results => {
-        const bestIdx = results.findIndex(ok => ok);
-        if (bestIdx !== -1 && bestIdx !== resolvedCleanProviderIdx) {
-          resolvedCleanProviderIdx = bestIdx;
-          if (state.activeBasemap !== 'cyclosm') {
-            applyBasemapMode(state.activeBasemap, bestIdx);
+          if (resolvedCleanProviderIdx !== current) {
+            resolvedCleanProviderIdx = current;
+            if (state.activeBasemap !== 'cyclosm') applyBasemapMode(state.activeBasemap, current);
+            if (navMap) applyNavBasemapTheme();
           }
-        }
+        };
+        img.onerror = () => {
+          clearTimeout(timer);
+          current++;
+          testNext();
+        };
+        img.src = prov.probeUrl;
+      }
+      testNext();
+    }
+
+    // Create unmistakable warning triangle icons for dangerous Brasília arterial crossings
+    function createDangerCrossingIcon(pt, compact = false) {
+      const isHigh = pt.danger !== 'media';
+      const fillHex = isHigh ? '#ef4444' : '#f59e0b';
+      const strokeHex = isHigh ? '#fecaca' : '#fef3c7';
+      const haloClass = isHigh ? 'bg-rose-500/65' : 'bg-amber-400/55';
+      const pillClass = isHigh
+        ? 'border-rose-300/90 bg-rose-600 text-white'
+        : 'border-amber-200/90 bg-amber-500 text-slate-950';
+      const sz = compact ? 30 : 34;
+
+      return L.divIcon({
+        className: 'danger-crossing-marker',
+        html: `
+          <div class="relative flex flex-col items-center">
+            <div class="relative flex items-center justify-center" style="width:${sz}px;height:${sz}px;">
+              <span class="danger-crossing-pulse absolute inset-0 rounded-full ${haloClass}"></span>
+              <svg viewBox="0 0 36 34" class="relative h-full w-full drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)]">
+                <path d="M18 2 L34 31 L2 31 Z" fill="${fillHex}" stroke="${strokeHex}" stroke-width="2.6" stroke-linejoin="round" />
+                <rect x="16.4" y="11" width="3.2" height="10.5" rx="1.5" fill="#ffffff" />
+                <circle cx="18" cy="25.5" r="2.1" fill="#ffffff" />
+              </svg>
+            </div>
+            ${pt.shortTag ? `<span class="-mt-1 rounded border px-1 py-0 text-[8px] font-black leading-tight tracking-wide shadow-md whitespace-nowrap ${pillClass}">${pt.shortTag}</span>` : ''}
+          </div>
+        `,
+        iconSize: [sz, sz + 11],
+        iconAnchor: [sz / 2, sz / 2]
       });
     }
 
     function renderStaticOverlays() {
-      // Arterial Slowdown Pins (Clean map: bike parking & Eixão line removed)
+      // High-visibility Dangerous Arterial Crossings (L2, Eixão, W3, Pedestres)
       slowdownLayerGroup.clearLayers();
       ARTERIAL_CROSSINGS.forEach(pt => {
-        const icon = L.divIcon({
-          className: 'slowdown-pin',
-          html: `<div class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-amber-400 text-[10px] font-extrabold text-slate-950 shadow-lg">!</div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        });
-        L.marker(pt.coords, { icon })
+        const isHigh = pt.danger !== 'media';
+
+        // Translucent red/amber hazard zone circle directly on the street crossing
+        L.circle(pt.coords, {
+          radius: isHigh ? 38 : 30,
+          color: isHigh ? '#f43f5e' : '#f59e0b',
+          fillColor: isHigh ? '#ef4444' : '#f59e0b',
+          fillOpacity: isHigh ? 0.22 : 0.16,
+          weight: 1.5,
+          dashArray: '4, 4',
+          interactive: false
+        }).addTo(slowdownLayerGroup);
+
+        const icon = createDangerCrossingIcon(pt, false);
+        L.marker(pt.coords, { icon, zIndexOffset: 650 })
           .bindPopup(`
-            <div class="p-1 max-w-[230px]">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-amber-400">Desaceleração (+${pt.delaySec}s)</div>
-              <div class="mt-0.5 text-xs font-extrabold text-white">${pt.name}</div>
+            <div class="p-1 max-w-[240px]">
+              <div class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${isHigh ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">
+                ⚠️ ${isHigh ? 'Travessia Perigosa' : 'Zona de Atenção'} (+${pt.delaySec}s)
+              </div>
+              <div class="mt-1 text-xs font-extrabold text-white">${pt.name}</div>
               <p class="mt-1 text-[11px] leading-relaxed text-slate-300">${pt.note}</p>
             </div>
           `)
@@ -2527,48 +2946,70 @@
         weight: 10,
         opacity: 0.35,
         lineCap: 'round',
-        lineJoin: 'round'
+        lineJoin: 'round',
+        interactive: false
       }).addTo(activeRouteLayerGroup);
 
-      L.polyline(route.coords, {
+      const mainLine = L.polyline(route.coords, {
         color: '#38bdf8',
-        weight: 5,
+        weight: 5.5,
         opacity: 0.98,
         lineCap: 'round',
-        lineJoin: 'round'
+        lineJoin: 'round',
+        className: state.routeEditor.isEditing ? 'editable-route-hit' : ''
       }).addTo(activeRouteLayerGroup);
+
+      // Google Maps-style: click/tap anywhere on the blue route while in Edit Mode to insert a draggable point!
+      if (state.routeEditor.isEditing) {
+        const hitLine = L.polyline(route.coords, {
+          color: '#38bdf8',
+          weight: 22,
+          opacity: 0.01,
+          className: 'editable-route-hit'
+        }).addTo(activeRouteLayerGroup);
+
+        const onRouteLineClick = (ev) => {
+          if (!state.routeEditor.isEditing) return;
+          L.DomEvent.stopPropagation(ev);
+          insertEditableWaypointAtLatLng(ev.latlng.lat, ev.latlng.lng);
+        };
+        mainLine.on('click', onRouteLineClick);
+        hitLine.on('click', onRouteLineClick);
+      }
 
       const startPt = route.coords[0];
       const endPt = route.coords[route.coords.length - 1];
 
-      const startIcon = L.divIcon({
-        className: 'route-start-badge',
-        html: `<div class="rounded-full border-2 border-white bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">Partida</div>`,
-        iconSize: [60, 20],
-        iconAnchor: [30, 24]
-      });
-      L.marker(startPt, { icon: startIcon }).addTo(activeRouteLayerGroup);
+      if (!state.routeEditor.isEditing) {
+        const startIcon = L.divIcon({
+          className: 'route-start-badge',
+          html: `<div class="rounded-full border-2 border-white bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">Partida</div>`,
+          iconSize: [60, 20],
+          iconAnchor: [30, 24]
+        });
+        L.marker(startPt, { icon: startIcon }).addTo(activeRouteLayerGroup);
 
-      const endIcon = L.divIcon({
-        className: 'route-end-badge',
-        html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">${route.destLabel || DESTINATIONS[state.destinationKey].label}</div>`,
-        iconSize: [120, 20],
-        iconAnchor: [60, -4]
-      });
-      L.marker(endPt, { icon: endIcon }).addTo(activeRouteLayerGroup);
+        const endIcon = L.divIcon({
+          className: 'route-end-badge',
+          html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">${route.destLabel || DESTINATIONS[state.destinationKey].label}</div>`,
+          iconSize: [120, 20],
+          iconAnchor: [60, -4]
+        });
+        L.marker(endPt, { icon: endIcon }).addTo(activeRouteLayerGroup);
 
-      const riderIcon = L.divIcon({
-        className: 'rider-marker',
-        html: `<div class="rider-pulse flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-400 shadow-lg">
-                 <div class="h-2 w-2 rounded-full bg-slate-950"></div>
-               </div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-      });
-      riderMarker = L.marker(interpolateCoord(route.coords, state.playback.progress), {
-        icon: riderIcon,
-        zIndexOffset: 1000
-      }).addTo(activeRouteLayerGroup);
+        const riderIcon = L.divIcon({
+          className: 'rider-marker',
+          html: `<div class="rider-pulse flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-400 shadow-lg">
+                   <div class="h-2 w-2 rounded-full bg-slate-950"></div>
+                 </div>`,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+        riderMarker = L.marker(interpolateCoord(route.coords, state.playback.progress), {
+          icon: riderIcon,
+          zIndexOffset: 1000
+        }).addTo(activeRouteLayerGroup);
+      }
     }
 
     function initMap() {
@@ -2587,56 +3028,67 @@
       slowdownLayerGroup = L.layerGroup().addTo(map);
       activeRouteLayerGroup = L.layerGroup().addTo(map);
       drawLayerGroup = L.layerGroup().addTo(map);
+      routeEditLayerGroup = L.layerGroup().addTo(map);
 
       renderDefaultCiclomapaLayer();
       renderStaticOverlays();
       drawSelectedRouteOnMap();
 
+      // Map events for Pick-Point (A->B Planner) & Custom Route Drawing
       map.on('click', (e) => {
         if (state.planner.pickingTarget) {
-          handleMapPickOriginDest(e);
+          handleMapClickPickPlanner(e);
           return;
         }
-        handleMapClickDraw(e);
+        if (state.isDrawing) {
+          handleMapClickDraw(e);
+        }
       });
-      map.on('mousemove', handleMapMouseMoveDraw);
+
+      map.on('mousemove', (e) => {
+        if (state.isDrawing) {
+          handleMapMouseMoveDraw(e);
+        }
+      });
     }
 
     // =========================================================================
     // 8B. SMART A -> B ROUTE PLANNER (CICLOVIAS + WIDE PAVED SIDEWALKS)
     // =========================================================================
-    const KNOWN_BSB_PLACES = {
-      'câmara dos deputados, brasília': [-15.799000, -47.862554],
-      'shcgn 711 norte, brasília': [-15.756483, -47.895700],
-      'sgan 912 norte, brasília': [-15.752400, -47.899200],
-      'rodoviária do plano piloto, brasília': [-15.793400, -47.882800],
-      'parque da cidade dona sarah kubitschek, brasília': [-15.800700, -47.907800],
-      'unb - campus darcy ribeiro, brasília': [-15.763400, -47.870700],
-      'uniceub - 707/907 norte, brasília': [-15.767600, -47.894200],
-      "parque olhos d'água, asa norte, brasília": [-15.743800, -47.886100],
-      'shopping conjunto nacional, brasília': [-15.791600, -47.882600],
-      'brasília shopping, asa norte': [-15.786600, -47.888900],
-      'torre de tv de brasília': [-15.790500, -47.892800],
-      'pontão do lago sul, brasília': [-15.826600, -47.872600],
-      'esplanada dos ministérios, brasília': [-15.796600, -47.872500],
-      'sqn 308 norte, brasília': [-15.764600, -47.889500],
-      'sqs 308 sul, brasília': [-15.818500, -47.903500]
-    };
+    const BSB_KNOWN_PLACES = [
+      { keys: ['camara', 'câmara', 'congresso', 'tres poderes', 'três poderes'], coords: [-15.799000, -47.862554] },
+      { keys: ['711 norte', 'shcgn 711', '711n'], coords: [-15.756483, -47.895700] },
+      { keys: ['912 norte', 'sgan 912', 'masterplace', '912n'], coords: [-15.752400, -47.899200] },
+      { keys: ['rodoviaria', 'rodoviária', 'plano piloto'], coords: [-15.793400, -47.882900] },
+      { keys: ['parque da cidade', 'sarah kubitschek'], coords: [-15.800700, -47.907000] },
+      { keys: ['unb', 'darcy ribeiro', 'universidade de brasilia'], coords: [-15.763400, -47.870600] },
+      { keys: ['uniceub', 'ceub', '707/907', '707 norte'], coords: [-15.767600, -47.894400] },
+      { keys: ['olhos d agua', "olhos d'agua", "olhos d'água", 'parque olhos'], coords: [-15.744300, -47.886100] },
+      { keys: ['conjunto nacional'], coords: [-15.791500, -47.882700] },
+      { keys: ['brasilia shopping', 'brasília shopping'], coords: [-15.786700, -47.888800] },
+      { keys: ['torre de tv'], coords: [-15.790500, -47.892800] },
+      { keys: ['pontao', 'pontão', 'lago sul'], coords: [-15.826600, -47.872500] },
+      { keys: ['esplanada', 'ministerios', 'ministérios'], coords: [-15.797500, -47.872200] },
+      { keys: ['sqn 308', '308 norte'], coords: [-15.766200, -47.889100] },
+      { keys: ['sqs 308', '308 sul'], coords: [-15.816500, -47.903800] }
+    ];
 
     function setPlannerPickMode(target) {
+      if (target && state.isDrawing) toggleCustomDrawMode(false);
+      if (target && state.routeEditor.isEditing) toggleRouteEditMode(false);
       state.planner.pickingTarget = target;
+
       const mapEl = document.getElementById('map');
       const banner = document.getElementById('planPickBanner');
-      const bannerTxt = document.getElementById('planPickBannerText');
+      const txt = document.getElementById('planPickBannerText');
 
       if (target) {
-        if (state.isDrawing) toggleCustomDrawMode(false);
         mapEl.classList.add('picking-point');
         banner.classList.remove('hidden');
         banner.classList.add('flex');
-        bannerTxt.textContent = target === 'origin'
-          ? 'Clique no mapa abaixo para marcar a Origem (Ponto A)'
-          : 'Clique no mapa abaixo para marcar o Destino (Ponto B)';
+        txt.textContent = target === 'origin'
+          ? 'Clique no mapa abaixo para marcar a Origem (A)...'
+          : 'Clique no mapa abaixo para marcar o Destino (B)...';
       } else {
         mapEl.classList.remove('picking-point');
         banner.classList.add('hidden');
@@ -2644,109 +3096,139 @@
       }
     }
 
-    function handleMapPickOriginDest(e) {
+    function handleMapClickPickPlanner(e) {
       const target = state.planner.pickingTarget;
+      if (!target) return;
+
       const pt = [+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)];
-      const label = `${pt[0].toFixed(5)}, ${pt[1].toFixed(5)}`;
+      const label = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
 
       if (target === 'origin') {
         state.planner.originCoords = pt;
-        document.getElementById('planOriginInput').value = `Mapa (${label})`;
+        document.getElementById('planOriginInput').value = label;
+        showToast('Origem (A) Marcada', 'Agora escolha o Destino (B) e clique em Calcular.');
       } else {
         state.planner.destCoords = pt;
-        document.getElementById('planDestInput').value = `Mapa (${label})`;
+        document.getElementById('planDestInput').value = label;
+        showToast('Destino (B) Marcado', 'Clique em Calcular para traçar a rota segura.');
       }
       setPlannerPickMode(null);
-      showToast(target === 'origin' ? 'Origem Marcada (A)' : 'Destino Marcado (B)', 'Clique em "Calcular" para gerar a rota segura.');
     }
 
-    async function resolvePlaceToCoords(rawInput, cachedCoords) {
-      const txt = (rawInput || '').trim();
-      if (!txt) return null;
+    async function resolvePlaceToCoords(queryText, cachedCoords = null) {
+      const raw = (queryText || '').trim();
+      if (!raw) return null;
 
-      // 1. Direct coordinate pair or "Mapa (lat, lng)"
-      const coordMatch = txt.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+      const coordMatch = raw.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
       if (coordMatch) {
         return [parseFloat(coordMatch[1]), parseFloat(coordMatch[2])];
       }
-      if (cachedCoords && txt.startsWith('Mapa (')) {
+
+      const norm = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      for (const p of BSB_KNOWN_PLACES) {
+        if (p.keys.some(k => norm.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
+          return p.coords;
+        }
+      }
+
+      if (cachedCoords && raw.startsWith('Mapa (')) {
         return cachedCoords;
       }
 
-      // 2. Instant Brasília preset match
-      const lower = txt.toLowerCase();
-      if (KNOWN_BSB_PLACES[lower]) return KNOWN_BSB_PLACES[lower];
-      for (const [k, v] of Object.entries(KNOWN_BSB_PLACES)) {
-        if (k.includes(lower) || lower.includes(k.split(',')[0])) return v;
-      }
-
-      // 3. Nominatim OpenStreetMap geocoding scoped to Brasília / DF
-      const query = lower.includes('brasília') || lower.includes('brasilia') || lower.includes('df')
-        ? txt
-        : `${txt}, Brasília, DF, Brasil`;
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&viewbox=-48.25,-15.50,-47.35,-16.05&bounded=1&q=${encodeURIComponent(query)}`;
       try {
-        const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+        const q = norm.includes('brasilia') || norm.includes('distrito federal') ? raw : `${raw}, Brasília, DF, Brasil`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&viewbox=-48.28,-15.50,-47.35,-16.05&bounded=1&q=${encodeURIComponent(q)}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5500);
+        const res = await fetch(url, { signal: controller.signal, headers: { 'Accept-Language': 'pt-BR' } });
+        clearTimeout(timer);
         if (!res.ok) return null;
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        const arr = await res.json();
+        if (Array.isArray(arr) && arr.length > 0) {
+          return [parseFloat(arr[0].lat), parseFloat(arr[0].lon)];
         }
       } catch (e) {}
+
       return null;
     }
 
-    // Score a candidate route by real CicloMapa coverage + paved wide sidewalks / cycleway steps
-    function scoreCandidateSmartRoute(osrmRoute) {
-      const rawCoords = osrmRoute?.geometry?.coordinates || [];
-      const coords = rawCoords.map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
-      const dense = densifyPolyline(coords, 45);
+    // Score a candidate route: strongly rewards real CicloMapa ciclovias & penalizes car lanes (L2/W3/Eixão)
+    function scoreCandidateSmartRoute(coords, rawSteps = [], sourceTag = 'osrm') {
+      const dense = densifyPolyline(coords, 35);
 
-      let onCycleCount = 0;
+      let onCycleStrict = 0; // Within 20m of real CicloMapa line (actually ON the ciclovia, not car lanes!)
+      let nearCycle = 0;     // Within 45m
       for (const pt of dense) {
-        const snap = findNearestCycleSnap(pt[0], pt[1], 36);
-        if (snap) onCycleCount++;
-      }
-      const cyclePct = dense.length > 0 ? Math.round((onCycleCount / dense.length) * 100) : 0;
-
-      // Analyze OSRM step classes for wide sidewalks/footways/paths vs busy arterial streets
-      let calmMeters = 0;
-      let totalStepMeters = Math.max(1, osrmRoute.distance || 1);
-      const legs = osrmRoute.legs || [];
-      for (const leg of legs) {
-        for (const step of (leg.steps || [])) {
-          const mode = step.mode || '';
-          const name = String(step.name || '').toLowerCase();
-          if (
-            mode === 'pushing bike' ||
-            name.includes('ciclo') ||
-            name.includes('parque') ||
-            name.includes('calçad') ||
-            name.includes('passarela') ||
-            name.includes('sqn') ||
-            name.includes('sqs') ||
-            name.includes('cln') ||
-            name.includes('cls') ||
-            name === ''
-          ) {
-            calmMeters += step.distance || 0;
-          }
+        const hitStrict = findNearestCycleSnap(pt[0], pt[1], 20);
+        if (hitStrict) {
+          onCycleStrict++;
+          nearCycle++;
+        } else if (findNearestCycleSnap(pt[0], pt[1], 45)) {
+          nearCycle++;
         }
       }
-      const calmPct = Math.min(100, Math.max(cyclePct, Math.round((calmMeters / totalStepMeters) * 100)));
-      const distanceKm = +(osrmRoute.distance / 1000).toFixed(2);
+      const cyclePct = dense.length > 0 ? Math.round((onCycleStrict / dense.length) * 100) : 0;
 
-      // Composite safety score: heavily rewards CicloMapa ciclovias & calm/sidewalk paths with modest distance penalty
-      const safeScore = (cyclePct * 1.45) + (calmPct * 0.55) - (distanceKm * 4.5);
+      // Penalize riding directly inside busy car arterial lanes (Via L2, W3, Eixão, L4) when NOT on a ciclovia
+      let arterialCarMeters = 0;
+      let calmMeters = 0;
+      let totalStepMeters = 0;
+      for (const step of rawSteps) {
+        const dist = step.distance || 0;
+        totalStepMeters += dist;
+        const mode = step.mode || '';
+        const name = String(step.name || '').toLowerCase();
+        const isCarArterial =
+          name.includes('via l2') ||
+          name.includes('via l4') ||
+          name.includes('via w3') ||
+          name.includes('eixo rodovi') ||
+          name.includes('eixão') ||
+          name.includes('epia') ||
+          name.includes('via n1') ||
+          name.includes('via s1');
 
-      return { coords, distanceKm, cyclePct, calmPct, safeScore };
+        if (isCarArterial && mode !== 'pushing bike') {
+          arterialCarMeters += dist;
+        } else if (
+          mode === 'pushing bike' ||
+          mode === 'walking' ||
+          name.includes('ciclo') ||
+          name.includes('parque') ||
+          name.includes('calçad') ||
+          name.includes('passarela') ||
+          name.includes('sqn') ||
+          name.includes('sqs') ||
+          name.includes('cln') ||
+          name.includes('cls') ||
+          name === ''
+        ) {
+          calmMeters += dist;
+        }
+      }
+
+      const distanceKm = computePathDistanceKm(coords);
+      const totalM = Math.max(1, totalStepMeters || distanceKm * 1000);
+      const arterialCarPct = Math.round((arterialCarMeters / totalM) * 100);
+      const calmPct = sourceTag === 'ciclomapa-graph'
+        ? Math.min(100, Math.max(cyclePct, 88))
+        : Math.min(100, Math.max(cyclePct, Math.round((calmMeters / totalM) * 100)));
+
+      // Composite safety score: massively favors real CicloMapa ciclovias and penalizes L2/W3/Eixão car lanes
+      const cycleGraphBonus = sourceTag === 'ciclomapa-graph' ? 28 : 0;
+      const safeScore = (cyclePct * 2.1) + (calmPct * 0.5) - (arterialCarPct * 1.45) - (distanceKm * 4.2) + cycleGraphBonus;
+
+      return { coords, distanceKm, cyclePct, calmPct, arterialCarPct, safeScore, sourceTag };
     }
 
-    async function fetchOSRMCandidates(waypoints) {
+    async function fetchOSRMCandidates(waypoints, profile = 'bike') {
       const coordStr = waypoints.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
-      const url = `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coordStr}?overview=full&geometries=geojson&alternatives=true&steps=true`;
+      const base = profile === 'foot'
+        ? 'https://routing.openstreetmap.de/routed-foot/route/v1/foot'
+        : 'https://routing.openstreetmap.de/routed-bike/route/v1/driving';
+      const url = `${base}/${coordStr}?overview=full&geometries=geojson&alternatives=true&steps=true`;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8500);
+      const timer = setTimeout(() => controller.abort(), 7500);
       try {
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timer);
@@ -2756,6 +3238,92 @@
       } catch (e) {
         clearTimeout(timer);
         return [];
+      }
+    }
+
+    // Build a realistic connector (sidewalk/footway first, then bike, then straight fallback) for short access legs
+    async function routeShortConnector(ptA, ptB) {
+      const d = haversineMeters(ptA[0], ptA[1], ptB[0], ptB[1]);
+      if (d < 32) return [ptA, ptB];
+      const foot = await fetchOSRMCandidates([ptA, ptB], 'foot');
+      if (foot[0]?.geometry?.coordinates?.length >= 2) {
+        return foot[0].geometry.coordinates.map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
+      }
+      const bike = await fetchOSRMCandidates([ptA, ptB], 'bike');
+      if (bike[0]?.geometry?.coordinates?.length >= 2) {
+        return bike[0].geometry.coordinates.map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
+      }
+      return [ptA, ptB];
+    }
+
+    // Core smart leg router: routes ON real CicloMapa green ciclovias first, avoiding car lanes like Via L2
+    async function computeSmartLeg(ptA, ptB, profile = 'safe') {
+      const scoredCandidates = [];
+
+      if (profile === 'safe') {
+        // 1. Primary: Real CicloMapa Graph A* path + realistic sidewalk access/egress connectors
+        const cycleGraphRes = findCycleGraphPath(ptA, ptB);
+        if (cycleGraphRes && cycleGraphRes.coords.length >= 2) {
+          const firstC = cycleGraphRes.coords[0];
+          const lastC = cycleGraphRes.coords[cycleGraphRes.coords.length - 1];
+          const [accessCoords, egressCoords] = await Promise.all([
+            routeShortConnector(ptA, firstC),
+            routeShortConnector(lastC, ptB)
+          ]);
+
+          const stitched = [
+            ...accessCoords.slice(0, -1),
+            ...cycleGraphRes.coords,
+            ...egressCoords.slice(1)
+          ];
+          scoredCandidates.push(scoreCandidateSmartRoute(stitched, [], 'ciclomapa-graph'));
+        }
+
+        // 2. Secondary: OSRM bike + OSRM foot (wide paved sidewalks/crosswalks)
+        const [bikeRoutes, footRoutes] = await Promise.all([
+          fetchOSRMCandidates([ptA, ptB], 'bike'),
+          fetchOSRMCandidates([ptA, ptB], 'foot')
+        ]);
+
+        bikeRoutes.forEach(r => {
+          const c = (r.geometry?.coordinates || []).map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
+          const steps = (r.legs || []).flatMap(l => l.steps || []);
+          if (c.length >= 2) scoredCandidates.push(scoreCandidateSmartRoute(c, steps, 'osrm-bike'));
+        });
+        footRoutes.slice(0, 1).forEach(r => {
+          const c = (r.geometry?.coordinates || []).map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
+          const steps = (r.legs || []).flatMap(l => l.steps || []);
+          if (c.length >= 2) scoredCandidates.push(scoreCandidateSmartRoute(c, steps, 'osrm-foot'));
+        });
+
+        if (scoredCandidates.length === 0) return null;
+
+        const minDistKm = Math.min(...scoredCandidates.map(s => s.distanceKm));
+        // Allow up to +38% detour to stay safely on real green ciclovias instead of Via L2/W3 car traffic
+        const reasonable = scoredCandidates.filter(s => s.distanceKm <= Math.max(minDistKm * 1.38, minDistKm + 1.3));
+        const best = (reasonable.length > 0 ? reasonable : scoredCandidates).sort((a, b) => b.safeScore - a.safeScore)[0];
+
+        // If an OSRM route won, gently pull any points running right beside a parallel ciclovia (< 42m) onto the ciclovia
+        if (best.sourceTag !== 'ciclomapa-graph') {
+          best.coords = best.coords.map(pt => {
+            const hit = findNearestCycleSnap(pt[0], pt[1], 42);
+            return hit ? [+hit.point[0].toFixed(6), +hit.point[1].toFixed(6)] : pt;
+          });
+          const rescore = scoreCandidateSmartRoute(best.coords, [], best.sourceTag);
+          best.cyclePct = rescore.cyclePct;
+          best.distanceKm = rescore.distanceKm;
+        }
+        return best;
+      } else {
+        // Direct mode: shortest bike route
+        const bikeRoutes = await fetchOSRMCandidates([ptA, ptB], 'bike');
+        if (bikeRoutes.length === 0) return null;
+        const scored = bikeRoutes.map(r => {
+          const c = (r.geometry?.coordinates || []).map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
+          const steps = (r.legs || []).flatMap(l => l.steps || []);
+          return scoreCandidateSmartRoute(c, steps, 'osrm-bike');
+        });
+        return scored.sort((a, b) => a.distanceKm - b.distanceKm)[0];
       }
     }
 
@@ -2769,6 +3337,7 @@
         return;
       }
 
+      if (state.routeEditor.isEditing) toggleRouteEditMode(false);
       btn.disabled = true;
       btn.textContent = 'Buscando...';
 
@@ -2786,64 +3355,34 @@
         state.planner.originCoords = origPt;
         state.planner.destCoords = destPt;
 
-        // 1. Fetch direct + alternative bicycle/sidewalk routes from OSRM
-        const rawCandidates = await fetchOSRMCandidates([origPt, destPt]);
-
-        // 2. In "Ciclovia + Calçada Larga" mode, also probe a route anchored onto the nearest real CicloMapa midpoint
-        if (state.planner.profile === 'safe' && state.cyclingSegments.length > 0) {
-          const midLat = (origPt[0] + destPt[0]) / 2;
-          const midLng = (origPt[1] + destPt[1]) / 2;
-          const nearMidCycle = findNearestCycleSnap(midLat, midLng, 1400);
-          if (nearMidCycle) {
-            const cycleAnchored = await fetchOSRMCandidates([origPt, nearMidCycle.point, destPt]);
-            rawCandidates.push(...cycleAnchored);
-          }
-        }
-
-        if (rawCandidates.length === 0) {
-          showToast('Serviço de Rotas Indisponível', 'Não foi possível consultar o roteador OSM agora. Tente novamente em instantes.');
+        const best = await computeSmartLeg(origPt, destPt, state.planner.profile);
+        if (!best || !best.coords || best.coords.length < 2) {
+          showToast('Serviço de Rotas Indisponível', 'Não foi possível calcular a rota agora. Tente novamente em instantes.');
           return;
         }
 
-        const scored = rawCandidates.map(scoreCandidateSmartRoute);
-        const minDistKm = Math.min(...scored.map(s => s.distanceKm));
-
-        // Pick best route according to selected profile (never exceed 1.32x direct distance)
-        let best;
-        if (state.planner.profile === 'safe') {
-          const reasonable = scored.filter(s => s.distanceKm <= Math.max(minDistKm * 1.32, minDistKm + 1.2));
-          best = (reasonable.length > 0 ? reasonable : scored).sort((a, b) => b.safeScore - a.safeScore)[0];
-        } else {
-          best = scored.sort((a, b) => a.distanceKm - b.distanceKm)[0];
-        }
-
-        // Gentle snap onto real CicloMapa segments where within 28m for crisp bike-lane alignment
-        const refinedCoords = best.coords.map(pt => {
-          const hit = findNearestCycleSnap(pt[0], pt[1], 28);
-          return hit ? [+hit.point[0].toFixed(6), +hit.point[1].toFixed(6)] : pt;
-        });
-
         const shortOrigin = originTxt.split(',')[0].slice(0, 18);
         const shortDest = destTxt.split(',')[0].slice(0, 18);
+        const viaTag = best.sourceTag === 'ciclomapa-graph' ? 'Malha CicloMapa' : (state.planner.profile === 'safe' ? 'Ciclovia + Calçada' : 'Rota Direta');
 
         state.plannedRoute = {
           id: 'rota-planejada-ab',
           shortTitle: `🧭 ${shortOrigin} → ${shortDest}`,
-          tag: state.planner.profile === 'safe' ? 'Ciclovia + Calçada' : 'Rota Direta',
+          tag: viaTag,
           isPlanned: true,
           isOfficial: false,
           destLabel: shortDest,
           distanceKm: best.distanceKm,
-          description: `Rota calculada de ${originTxt} até ${destTxt} (${best.cyclePct}% em ciclovias do CicloMapa DF + ${Math.max(0, best.calmPct - best.cyclePct)}% em calçadas largas/vias calmas).`,
-          coords: refinedCoords
+          description: `Rota de ${originTxt} até ${destTxt} (${best.cyclePct}% em ciclovias reais do CicloMapa DF + calçadas pavimentadas). Clique em "Ajustar Pontos" para personalizar.`,
+          coords: best.coords
         };
 
         state.selectedRouteId = state.plannedRoute.id;
         resetPlayback();
         drawSelectedRouteOnMap();
         recalculateAll();
-        if (map && refinedCoords.length >= 2) {
-          map.fitBounds(L.latLngBounds(refinedCoords), { padding: [40, 40] });
+        if (map && best.coords.length >= 2) {
+          map.fitBounds(L.latLngBounds(best.coords), { padding: [40, 40] });
         }
         if (navMap) refreshNavigationRouteLayer();
 
@@ -2856,7 +3395,7 @@
         document.getElementById('planCyclePctBadge').textContent = `${best.cyclePct}% Ciclovia CicloMapa`;
         document.getElementById('planSidewalkBadge').textContent = `${best.calmPct}% Trecho Seguro / Calçadas`;
 
-        showToast('Rota Segura Calculada!', `${best.distanceKm.toFixed(2).replace('.', ',')} km (${best.cyclePct}% em ciclovia real). Pronta para Navegação GPS!`);
+        showToast('Rota nas Ciclovias Calculada!', `${best.distanceKm.toFixed(2).replace('.', ',')} km (${best.cyclePct}% em ciclovia real). Use "✋ Ajustar Pontos" se quiser mover algum trecho.`);
       } finally {
         btn.disabled = false;
         btn.textContent = 'Calcular';
@@ -2864,10 +3403,330 @@
     }
 
     // =========================================================================
+    // 8C. GOOGLE MAPS-STYLE INTERACTIVE ROUTE CUSTOMIZATION (DRAG WAYPOINTS)
+    // =========================================================================
+    function extractInitialEditAnchors(coords) {
+      if (!Array.isArray(coords) || coords.length < 2) return [];
+      const cum = buildCumulativeDistances(coords);
+      const total = cum[cum.length - 1];
+      // Place Start, Finish, and 3-4 evenly spaced draggable handles along the route
+      const numMid = total > 5000 ? 4 : total > 2200 ? 3 : 2;
+      const anchors = [{ lat: coords[0][0], lng: coords[0][1], isEndpoint: true, label: 'A' }];
+
+      for (let k = 1; k <= numMid; k++) {
+        const targetM = (total * k) / (numMid + 1);
+        let idx = 0;
+        while (idx < cum.length - 1 && cum[idx] < targetM) idx++;
+        anchors.push({ lat: coords[idx][0], lng: coords[idx][1], isEndpoint: false });
+      }
+
+      const last = coords[coords.length - 1];
+      anchors.push({ lat: last[0], lng: last[1], isEndpoint: true, label: 'B' });
+      return anchors;
+    }
+
+    function toggleRouteEditMode(forceState = null) {
+      const next = forceState !== null ? forceState : !state.routeEditor.isEditing;
+      state.routeEditor.isEditing = next;
+
+      const mapEl = document.getElementById('map');
+      const toolbar = document.getElementById('routeEditToolbar');
+      const btn = document.getElementById('btnToggleRouteEdit');
+      const lbl = document.getElementById('routeEditBtnLabel');
+
+      if (next) {
+        if (state.isDrawing) toggleCustomDrawMode(false);
+        if (state.planner.pickingTarget) setPlannerPickMode(null);
+        stopPlayback();
+
+        const activeRoute = getActiveRouteObject();
+        state.routeEditor.anchors = extractInitialEditAnchors(activeRoute.coords);
+        state.routeEditor.undoStack = [];
+
+        mapEl.classList.add('editing-route');
+        toolbar.classList.remove('hidden');
+        toolbar.classList.add('flex');
+        lbl.textContent = 'Ajustando...';
+        btn.className = 'inline-flex items-center gap-1.5 rounded-xl bg-sky-500 px-3 py-1.5 text-xs font-extrabold text-slate-950 shadow-lg transition';
+
+        drawSelectedRouteOnMap();
+        renderRouteEditHandles();
+        showToast('Modo Ajustar Rota Ativo', 'Arraste qualquer ponto branco para uma ciclovia verde ou toque na linha azul para criar novos desvios.');
+      } else {
+        mapEl.classList.remove('editing-route');
+        toolbar.classList.add('hidden');
+        toolbar.classList.remove('flex');
+        lbl.textContent = 'Ajustar Rota';
+        btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950';
+
+        clearSnapPreviewVisuals();
+        if (routeEditLayerGroup) routeEditLayerGroup.clearLayers();
+        drawSelectedRouteOnMap();
+      }
+    }
+
+    function renderRouteEditHandles() {
+      if (!routeEditLayerGroup) return;
+      routeEditLayerGroup.clearLayers();
+      if (!state.routeEditor.isEditing) return;
+
+      const anchors = state.routeEditor.anchors;
+      anchors.forEach((anc, idx) => {
+        const isStart = idx === 0;
+        const isEnd = idx === anchors.length - 1;
+
+        let innerHtml;
+        if (isStart) {
+          innerHtml = `<div class="route-edit-handle-dot flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-white bg-emerald-500 font-mono text-[11px] font-black text-slate-950 shadow-xl">A</div>`;
+        } else if (isEnd) {
+          innerHtml = `<div class="route-edit-handle-dot flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-white bg-purple-600 font-mono text-[11px] font-black text-white shadow-xl">B</div>`;
+        } else {
+          innerHtml = `<div class="route-edit-handle-dot flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-sky-400 bg-white shadow-[0_0_12px_rgba(56,189,248,0.85)]">
+                         <div class="h-1.5 w-1.5 rounded-full bg-slate-900"></div>
+                       </div>`;
+        }
+
+        const icon = L.divIcon({
+          className: 'route-edit-handle',
+          html: innerHtml,
+          iconSize: [38, 38],
+          iconAnchor: [19, 19]
+        });
+
+        const marker = L.marker([anc.lat, anc.lng], {
+          icon,
+          draggable: true,
+          zIndexOffset: isStart || isEnd ? 1400 : 1200
+        }).addTo(routeEditLayerGroup);
+
+        if (!isStart && !isEnd) {
+          marker.bindPopup(`
+            <div class="p-1 text-center">
+              <div class="text-[11px] font-bold text-white">Ponto de Ajuste #${idx}</div>
+              <div class="mt-0.5 text-[10px] text-slate-400">Arraste para mudar o caminho</div>
+              <button type="button" onclick="removeEditableWaypoint(${idx})"
+                class="mt-2 rounded-lg bg-rose-500 px-2.5 py-1 text-[10px] font-extrabold text-white hover:bg-rose-400">
+                ✕ Remover Ponto
+              </button>
+            </div>
+          `);
+        }
+
+        // Show live green magnetic snap indicator while dragging a handle
+        marker.on('drag', (ev) => {
+          const pos = ev.target.getLatLng();
+          if (state.routeEditor.snapToCycle) {
+            const snap = findNearestCycleSnap(pos.lat, pos.lng, 75);
+            if (snapPreviewRing && map) {
+              map.removeLayer(snapPreviewRing);
+              snapPreviewRing = null;
+            }
+            if (snap) {
+              snapPreviewRing = L.circleMarker(snap.point, {
+                radius: 8,
+                color: '#10b981',
+                fillColor: '#34d399',
+                fillOpacity: 0.75,
+                weight: 2.5,
+                interactive: false
+              }).addTo(map);
+            }
+          }
+        });
+
+        marker.on('dragend', async (ev) => {
+          clearSnapPreviewVisuals();
+          const pos = ev.target.getLatLng();
+          let finalLat = pos.lat;
+          let finalLng = pos.lng;
+
+          if (state.routeEditor.snapToCycle) {
+            const snap = findNearestCycleSnap(finalLat, finalLng, 75);
+            if (snap) {
+              finalLat = snap.point[0];
+              finalLng = snap.point[1];
+            }
+          }
+
+          // Save undo snapshot
+          state.routeEditor.undoStack.push(JSON.parse(JSON.stringify(state.routeEditor.anchors)));
+          state.routeEditor.anchors[idx].lat = +finalLat.toFixed(6);
+          state.routeEditor.anchors[idx].lng = +finalLng.toFixed(6);
+
+          await recomputeEditedRouteFromAnchors();
+        });
+      });
+    }
+
+    async function insertEditableWaypointAtLatLng(lat, lng) {
+      const anchors = state.routeEditor.anchors;
+      if (anchors.length < 2) return;
+
+      let targetLat = lat;
+      let targetLng = lng;
+      if (state.routeEditor.snapToCycle) {
+        const snap = findNearestCycleSnap(lat, lng, 65);
+        if (snap) {
+          targetLat = snap.point[0];
+          targetLng = snap.point[1];
+        }
+      }
+
+      // Find best insertion segment along current anchor sequence
+      let bestInsertIdx = 1;
+      let bestDist = Infinity;
+      for (let i = 0; i < anchors.length - 1; i++) {
+        const proj = projectPointToSegment(
+          targetLat,
+          targetLng,
+          [anchors[i].lat, anchors[i].lng],
+          [anchors[i + 1].lat, anchors[i + 1].lng]
+        );
+        const d = haversineMeters(targetLat, targetLng, proj.point[0], proj.point[1]);
+        if (d < bestDist) {
+          bestDist = d;
+          bestInsertIdx = i + 1;
+        }
+      }
+
+      state.routeEditor.undoStack.push(JSON.parse(JSON.stringify(anchors)));
+      anchors.splice(bestInsertIdx, 0, {
+        lat: +targetLat.toFixed(6),
+        lng: +targetLng.toFixed(6),
+        isEndpoint: false
+      });
+
+      renderRouteEditHandles();
+      showToast('Novo Ponto Criado!', 'Arraste o novo ponto branco para desviar a rota para onde quiser.');
+    }
+
+    async function removeEditableWaypoint(idx) {
+      const anchors = state.routeEditor.anchors;
+      if (idx <= 0 || idx >= anchors.length - 1) return;
+      state.routeEditor.undoStack.push(JSON.parse(JSON.stringify(anchors)));
+      anchors.splice(idx, 1);
+      if (map) map.closePopup();
+      await recomputeEditedRouteFromAnchors();
+    }
+
+    async function undoRouteEditStep() {
+      if (state.routeEditor.undoStack.length === 0) {
+        showToast('Nada para desfazer', 'Mova um ponto da rota primeiro.');
+        return;
+      }
+      state.routeEditor.anchors = state.routeEditor.undoStack.pop();
+      await recomputeEditedRouteFromAnchors();
+    }
+
+    async function recomputeEditedRouteFromAnchors() {
+      const anchors = state.routeEditor.anchors;
+      if (anchors.length < 2 || state.routeEditor.isRecalculating) return;
+
+      state.routeEditor.isRecalculating = true;
+      const statusPill = document.getElementById('routeEditStatusPill');
+      if (statusPill) {
+        statusPill.classList.remove('hidden');
+        statusPill.textContent = 'Recalculando nas ciclovias...';
+      }
+
+      try {
+        const legPromises = [];
+        for (let i = 0; i < anchors.length - 1; i++) {
+          legPromises.push(
+            computeSmartLeg(
+              [anchors[i].lat, anchors[i].lng],
+              [anchors[i + 1].lat, anchors[i + 1].lng],
+              state.routeEditor.snapToCycle ? 'safe' : 'direct'
+            )
+          );
+        }
+
+        const legs = await Promise.all(legPromises);
+        const mergedCoords = [];
+        for (let i = 0; i < legs.length; i++) {
+          const legCoords = legs[i]?.coords || [
+            [anchors[i].lat, anchors[i].lng],
+            [anchors[i + 1].lat, anchors[i + 1].lng]
+          ];
+          if (i === 0) mergedCoords.push(...legCoords);
+          else mergedCoords.push(...legCoords.slice(1));
+        }
+
+        const distKm = computePathDistanceKm(mergedCoords);
+        const scored = scoreCandidateSmartRoute(mergedCoords, [], 'edited');
+        const prevRoute = getActiveRouteObject();
+
+        const updatedRoute = {
+          id: 'rota-planejada-ab',
+          shortTitle: prevRoute.isPlanned ? prevRoute.shortTitle : `✋ ${prevRoute.shortTitle.replace(/^✋\s*/, '')} (Ajustada)`,
+          tag: `${scored.cyclePct}% Ciclovia`,
+          isPlanned: true,
+          isOfficial: false,
+          destLabel: prevRoute.destLabel || DESTINATIONS[state.destinationKey].label,
+          distanceKm: distKm,
+          description: `Rota personalizada arrastando pontos (${distKm.toFixed(2).replace('.', ',')} km • ${scored.cyclePct}% em ciclovias do CicloMapa DF).`,
+          coords: mergedCoords
+        };
+
+        state.plannedRoute = updatedRoute;
+        state.selectedRouteId = updatedRoute.id;
+
+        drawSelectedRouteOnMap();
+        renderRouteEditHandles();
+        recalculateAll();
+        if (navMap) refreshNavigationRouteLayer();
+
+        // Sync result strip if visible
+        const strip = document.getElementById('planResultStrip');
+        if (strip) {
+          strip.classList.remove('hidden');
+          strip.classList.add('flex');
+          const m = computeRouteMetrics(updatedRoute, getSelectedVehicle(), state.cruiseVelocity, state.riderWeightKg, false, state.includeSlowdowns);
+          document.getElementById('planResultSummary').textContent = `${distKm.toFixed(2).replace('.', ',')} km • ${m.oneWayMin} min`;
+          document.getElementById('planCyclePctBadge').textContent = `${scored.cyclePct}% Ciclovia CicloMapa`;
+          document.getElementById('planSidewalkBadge').textContent = 'Personalizada';
+        }
+      } finally {
+        state.routeEditor.isRecalculating = false;
+        if (statusPill) statusPill.classList.add('hidden');
+      }
+    }
+
+    function saveEditedRouteAsOfficial() {
+      const route = getActiveRouteObject();
+      if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
+
+      const distKm = computePathDistanceKm(route.coords);
+      const savedObj = {
+        id: 'rota-personalizada',
+        shortTitle: `★ Rota Ajustada (${distKm.toFixed(2).replace('.', ',')} km)`,
+        tag: 'Salva / Oficial',
+        isOfficial: true,
+        isCustom: true,
+        destLabel: route.destLabel,
+        distanceKm: distKm,
+        description: `Rota customizada e salva com ${route.coords.length} pontos (${distKm.toFixed(2).replace('.', ',')} km). Pronta para Navegação GPS.`,
+        coords: route.coords
+      };
+
+      state.customSavedRoute = savedObj;
+      state.selectedRouteId = savedObj.id;
+      try {
+        localStorage.setItem('bsb_custom_route_v2', JSON.stringify(savedObj));
+      } catch (e) {}
+
+      toggleRouteEditMode(false);
+      recalculateAll();
+      if (navMap) refreshNavigationRouteLayer();
+      showToast('Rota Personalizada Salva!', 'Sua rota ajustada já está salva e disponível na aba Navegação GPS.');
+    }
+
+    // =========================================================================
     // 8. CUSTOM ROUTE DRAWING TOOL & PRESET EXPORT/IMPORT
     // =========================================================================
     function toggleCustomDrawMode(forceState = null) {
       const next = forceState !== null ? forceState : !state.isDrawing;
+      if (next && state.routeEditor.isEditing) toggleRouteEditMode(false);
       state.isDrawing = next;
 
       const mapEl = document.getElementById('map');
@@ -3967,16 +4826,6 @@
       // Render loaded CicloMapa network (or Asa Norte base)
       syncNavCiclomapaOverlay();
 
-      ARTERIAL_CROSSINGS.forEach(pt => {
-        const icon = L.divIcon({
-          className: 'nav-crossing-dot',
-          html: `<div class="flex h-5 w-5 items-center justify-center rounded-full border border-slate-950 bg-amber-400 text-[9px] font-extrabold text-slate-950 shadow">!</div>`,
-          iconSize: [20, 20],
-          iconAnchor: [10, 10]
-        });
-        L.marker(pt.coords, { icon, interactive: false }).addTo(navCrossingsGroup);
-      });
-
       // GPS Puck Marker (Waze/Maps Blue Navigation Chevron)
       const puckIcon = L.divIcon({
         className: 'nav-gps-puck',
@@ -4069,6 +4918,38 @@
       });
       L.marker(coords[coords.length - 1], { icon: endIcon, interactive: false }).addTo(navRouteGroup);
 
+      // Show high-visibility Dangerous Travessia warning triangles ONLY along the active navigation route
+      if (navCrossingsGroup) {
+        navCrossingsGroup.clearLayers();
+        ARTERIAL_CROSSINGS.forEach(pt => {
+          let nearRoute = false;
+          for (let i = 0; i < coords.length; i += 2) {
+            if (haversineMeters(coords[i][0], coords[i][1], pt.coords[0], pt.coords[1]) <= 220) {
+              nearRoute = true;
+              break;
+            }
+          }
+          if (!nearRoute) return;
+
+          const isHigh = pt.danger !== 'media';
+          L.circle(pt.coords, {
+            radius: isHigh ? 36 : 26,
+            color: isHigh ? '#f43f5e' : '#f59e0b',
+            fillColor: isHigh ? '#ef4444' : '#f59e0b',
+            fillOpacity: isHigh ? 0.25 : 0.16,
+            weight: 1.8,
+            dashArray: '4, 4',
+            interactive: false
+          }).addTo(navCrossingsGroup);
+
+          L.marker(pt.coords, {
+            icon: createDangerCrossingIcon(pt, true),
+            interactive: false,
+            zIndexOffset: 900
+          }).addTo(navCrossingsGroup);
+        });
+      }
+
       const dirLabel = document.getElementById('navDirectionLabel');
       if (dirLabel) {
         dirLabel.textContent = state.nav.reversed ? 'Volta (Câmara)' : `Ida (${DESTINATIONS[state.destinationKey].label.split(' ').slice(-2).join(' ')})`;
@@ -4103,6 +4984,20 @@
         btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-sky-500/25 text-lg text-sky-200 shadow-xl backdrop-blur-md transition active:scale-95';
       } else {
         btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-lg text-slate-300 shadow-xl backdrop-blur-md transition active:scale-95';
+      }
+    }
+
+    function updateNavVoiceBtnVisual() {
+      const btn = document.getElementById('btnNavVoiceToggle');
+      if (!btn) return;
+      if (state.nav.voiceEnabled) {
+        btn.textContent = '🔊';
+        btn.title = 'Instruções por voz ativadas (toque para silenciar)';
+        btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-lg text-emerald-200 shadow-xl backdrop-blur-md transition active:scale-95';
+      } else {
+        btn.textContent = '🔇';
+        btn.title = 'Áudio desligado (toque para ativar voz PT-BR)';
+        btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-slate-400 shadow-xl backdrop-blur-md transition active:scale-95';
       }
     }
 
@@ -4217,217 +5112,254 @@
         } else if (distToM <= 35 && state.nav.lastSpokenKey !== speakKeyNear) {
           state.nav.lastSpokenKey = speakKeyNear;
           playSoftNavBeep(880, 110);
-          speakNavInstruction(nextM.type === 'arrive' ? 'Você chegou ao seu destino!' : nextM.text);
+          speakNavInstruction(nextM.text);
         }
       }
 
-      // Upcoming Arterial Crossing Caution Pill (within 220m ahead)
+      // Upcoming Dangerous Arterial Crossing Caution Alert (within 220m ahead)
       const crossingPill = document.getElementById('navCrossingPill');
-      const nearCrossing = ARTERIAL_CROSSINGS.find(c => haversineMeters(lat, lng, c.coords[0], c.coords[1]) < 220);
-      if (nearCrossing && crossingPill) {
-        const cDist = haversineMeters(lat, lng, nearCrossing.coords[0], nearCrossing.coords[1]);
-        crossingPill.classList.remove('hidden');
-        crossingPill.classList.add('flex');
-        document.getElementById('navCrossingText').textContent = `Atenção: ${nearCrossing.name} (${formatDistPtBR(cDist)})`;
-      } else if (crossingPill) {
-        crossingPill.classList.add('hidden');
-        crossingPill.classList.remove('flex');
+      if (crossingPill) {
+        let upcomingCrossing = null;
+        let upcomingDist = Infinity;
+
+        for (const c of ARTERIAL_CROSSINGS) {
+          const distDirect = haversineMeters(lat, lng, c.coords[0], c.coords[1]);
+          if (distDirect <= 220) {
+            const cProj = projectGpsOntoRoute(c.coords[0], c.coords[1], coords, cum);
+            if (cProj.offRouteMeters <= 220 && cProj.alongMeters >= proj.alongMeters - 25 && distDirect < upcomingDist) {
+              upcomingDist = distDirect;
+              upcomingCrossing = c;
+            }
+          }
+        }
+
+        if (upcomingCrossing) {
+          crossingPill.classList.remove('hidden');
+          crossingPill.classList.add('flex');
+          document.getElementById('navCrossingText').textContent =
+            `${upcomingCrossing.name} (${formatDistPtBR(upcomingDist)})`;
+          document.getElementById('navCrossingSubtext').textContent = upcomingCrossing.note;
+        } else {
+          crossingPill.classList.add('hidden');
+          crossingPill.classList.remove('flex');
+        }
       }
 
-      // Camera Follow + Directional Chevron Rotation
+      // Update directional chevron & center map if following GPS
       updateNavMapRotation(effectiveHeading);
       if (state.nav.followGps) {
-        navMap.setView(displayLatLng, Math.max(navMap.getZoom(), 17), { animate: true, duration: 0.35 });
+        const targetZoom = Math.max(navMap.getZoom(), 16);
+        navMap.setView(displayLatLng, targetZoom, { animate: true, duration: 0.35 });
       }
     }
 
-    function startLiveGPSNavigation() {
-      stopDemoGPSNavigation();
-      if (!('geolocation' in navigator)) {
-        showToast('GPS Indisponível', 'Seu navegador não suporta geolocalização. Use o botão "Testar" para simular.');
-        return;
+    function updateNavStartStopVisual() {
+      const btn = document.getElementById('btnNavStartStopGps');
+      const icon = document.getElementById('navStartStopIcon');
+      const label = document.getElementById('navStartStopLabel');
+      const pill = document.getElementById('navGpsStatusPill');
+
+      if (state.nav.isTracking) {
+        btn.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 transition active:scale-[0.98] hover:bg-rose-400';
+        icon.textContent = '⏹️';
+        label.textContent = 'Parar Navegação';
+        pill.textContent = '🛰️ GPS Ao Vivo';
+        pill.className = 'rounded-full border border-emerald-400/60 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300';
+      } else if (state.nav.isDemoMode) {
+        btn.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400';
+        icon.textContent = '🛰️';
+        label.textContent = 'Iniciar GPS Real';
+        pill.textContent = '🧪 Modo Teste';
+        pill.className = 'rounded-full border border-amber-400/60 bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300';
+      } else {
+        btn.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400';
+        icon.textContent = '🛰️';
+        label.textContent = 'Iniciar GPS Real';
+        pill.textContent = 'GPS Aguardando';
+        pill.className = 'rounded-full border border-slate-600/80 bg-slate-900/90 px-2 py-0.5 text-[10px] font-bold text-slate-300';
       }
-
-      state.nav.isTracking = true;
-      state.nav.followGps = true;
-      state.nav.lastSpokenKey = '';
-      updateNavControlsUI();
-      updateRecenterBtnVisual();
-      requestWakeLock();
-
-      const statusPill = document.getElementById('navGpsStatusPill');
-      if (statusPill) {
-        statusPill.textContent = 'Buscando Satélites...';
-        statusPill.className = 'rounded-full border border-sky-400/50 bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300';
-      }
-
-      speakNavInstruction('Navegação iniciada. Siga a rota azul pela ciclovia.');
-
-      state.nav.watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          if (statusPill) {
-            statusPill.textContent = '🛰️ GPS Ao Vivo';
-            statusPill.className = 'rounded-full border border-emerald-400/60 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300';
-          }
-          handleNavigationPositionUpdate(
-            pos.coords.latitude,
-            pos.coords.longitude,
-            pos.coords.speed,
-            pos.coords.heading,
-            pos.coords.accuracy
-          );
-        },
-        (err) => {
-          const msg = err.code === 1
-            ? 'Permissão de localização negada. Ative o GPS nas configurações do Chrome/Android.'
-            : 'Sinal GPS fraco (ambiente fechado). Vá para área aberta ou clique em "Testar".';
-          showToast('Sinal de GPS', msg);
-          if (statusPill) {
-            statusPill.textContent = 'GPS Indisponível';
-            statusPill.className = 'rounded-full border border-rose-400/60 bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300';
-          }
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 1000,
-          timeout: 12000
-        }
-      );
     }
 
-    function stopLiveGPSNavigation() {
-      if (state.nav.watchId !== null) {
-        navigator.geolocation.clearWatch(state.nav.watchId);
+    function stopNavigationTracking() {
+      if (state.nav.watchId !== null && navigator.geolocation) {
+        try { navigator.geolocation.clearWatch(state.nav.watchId); } catch (e) {}
         state.nav.watchId = null;
       }
-      state.nav.isTracking = false;
-      releaseWakeLock();
-      updateNavControlsUI();
-      const statusPill = document.getElementById('navGpsStatusPill');
-      if (statusPill && !state.nav.isDemoMode) {
-        statusPill.textContent = 'GPS Pausado';
-        statusPill.className = 'rounded-full border border-slate-600/80 bg-slate-900/90 px-2 py-0.5 text-[10px] font-bold text-slate-300';
-      }
-    }
-
-    function toggleDemoGPSNavigation() {
-      if (state.nav.isDemoMode) {
-        stopDemoGPSNavigation();
-        return;
-      }
-      stopLiveGPSNavigation();
-      state.nav.isDemoMode = true;
-      state.nav.followGps = true;
-      state.nav.demoProgressMeters = 0;
-      state.nav.lastSpokenKey = '';
-      updateNavControlsUI();
-      updateRecenterBtnVisual();
-      requestWakeLock();
-
-      const coords = getNavigationRouteCoords();
-      const cum = buildCumulativeDistances(coords);
-      const totalMeters = cum[cum.length - 1];
-
-      const statusPill = document.getElementById('navGpsStatusPill');
-      if (statusPill) {
-        statusPill.textContent = '🧪 Modo Teste GPS';
-        statusPill.className = 'rounded-full border border-amber-400/60 bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300';
-      }
-
-      speakNavInstruction('Simulação de navegação iniciada.');
-
-      state.nav.demoTimerId = setInterval(() => {
-        if (!state.nav.isDemoMode) return;
-        const simKmh = Math.max(18, state.cruiseVelocity);
-        // Run at 3x speed so user can quickly test turns & voice cues
-        const stepMeters = (simKmh / 3.6) * 0.5 * 3;
-        state.nav.demoProgressMeters += stepMeters;
-
-        if (state.nav.demoProgressMeters >= totalMeters) {
-          state.nav.demoProgressMeters = totalMeters;
-          const endPt = coords[coords.length - 1];
-          handleNavigationPositionUpdate(endPt[0], endPt[1], 0, state.nav.currentHeading, 5);
-          stopDemoGPSNavigation();
-          showToast('Chegada Simulada!', 'Teste de navegação concluído com sucesso.');
-          return;
-        }
-
-        const progressRatio = state.nav.demoProgressMeters / Math.max(1, totalMeters);
-        const pt = interpolateCoord(coords, progressRatio);
-        const aheadPt = interpolateCoord(coords, Math.min(1, progressRatio + 0.008));
-        const bearing = computeBearingDeg(pt[0], pt[1], aheadPt[0], aheadPt[1]);
-
-        handleNavigationPositionUpdate(pt[0], pt[1], simKmh / 3.6, bearing, 6);
-      }, 500);
-    }
-
-    function stopDemoGPSNavigation() {
       if (state.nav.demoTimerId !== null) {
         clearInterval(state.nav.demoTimerId);
         state.nav.demoTimerId = null;
       }
+
+      state.nav.isTracking = false;
       state.nav.isDemoMode = false;
+      state.nav.lastSpokenKey = '';
       releaseWakeLock();
-      updateNavControlsUI();
+
+      const demoLbl = document.getElementById('navDemoBtnLabel');
+      if (demoLbl) demoLbl.textContent = 'Testar';
+
+      const offBanner = document.getElementById('navOffRouteBanner');
+      if (offBanner) {
+        offBanner.classList.add('hidden');
+        offBanner.classList.remove('flex');
+      }
+      const crossingPill = document.getElementById('navCrossingPill');
+      if (crossingPill) {
+        crossingPill.classList.add('hidden');
+        crossingPill.classList.remove('flex');
+      }
+
+      document.getElementById('navSpeedKmh').textContent = '0';
+      document.getElementById('navManeuverDist').textContent = 'Pronto';
+      document.getElementById('navManeuverText').textContent = 'Toque em "Iniciar GPS Real"';
+      document.getElementById('navManeuverIcon').innerHTML = getManeuverSvg('straight');
+      updateNavStartStopVisual();
+      updateNavIdleMetrics();
     }
 
-    function updateNavControlsUI() {
-      const btnStart = document.getElementById('btnNavStartStopGps');
-      const iconStart = document.getElementById('navStartStopIcon');
-      const labelStart = document.getElementById('navStartStopLabel');
-      const demoBtn = document.getElementById('btnNavDemoSim');
-      const demoLabel = document.getElementById('navDemoBtnLabel');
-
+    function startLiveGpsNavigation() {
       if (state.nav.isTracking) {
-        btnStart.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 transition active:scale-[0.98] hover:bg-rose-400';
-        iconStart.textContent = '⏹';
-        labelStart.textContent = 'Parar Navegação';
-      } else {
-        btnStart.className = 'col-span-8 flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-extrabold text-slate-950 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98] hover:bg-emerald-400';
-        iconStart.textContent = '🛰️';
-        labelStart.textContent = 'Iniciar GPS Real';
+        stopNavigationTracking();
+        return;
       }
 
       if (state.nav.isDemoMode) {
-        demoBtn.className = 'col-span-4 flex items-center justify-center gap-1 rounded-xl bg-amber-400 py-2.5 text-xs font-extrabold text-slate-950 transition active:scale-[0.98]';
-        demoLabel.textContent = 'Parar';
-      } else {
-        demoBtn.className = 'col-span-4 flex items-center justify-center gap-1 rounded-xl border border-amber-500/50 bg-amber-500/15 py-2.5 text-xs font-extrabold text-amber-300 transition active:scale-[0.98] hover:bg-amber-500 hover:text-slate-950';
-        demoLabel.textContent = 'Testar';
+        stopNavigationTracking();
       }
+
+      if (!('geolocation' in navigator)) {
+        showToast('GPS Indisponível', 'Este navegador não oferece suporte à API de Geolocalização.');
+        return;
+      }
+
+      if (!navMap) initNavMap();
+      state.nav.isTracking = true;
+      state.nav.followGps = true;
+      state.nav.lastSpokenKey = '';
+      updateRecenterBtnVisual();
+      updateNavStartStopVisual();
+      requestWakeLock();
+
+      document.getElementById('navManeuverDist').textContent = 'Buscando...';
+      document.getElementById('navManeuverText').textContent = 'Conectando ao sinal GPS...';
+
+      state.nav.watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, speed, heading, accuracy } = pos.coords;
+          handleNavigationPositionUpdate(latitude, longitude, speed, heading, accuracy);
+        },
+        (err) => {
+          const pill = document.getElementById('navGpsStatusPill');
+          if (pill) {
+            pill.textContent = 'GPS Indisponível';
+            pill.className = 'rounded-full border border-rose-500/60 bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-200';
+          }
+          let msg = 'Não foi possível obter sua localização.';
+          if (err.code === 1) {
+            msg = 'Permissão de localização negada. Ative o GPS nas configurações do Chrome/Android.';
+          } else if (err.code === 2) {
+            msg = 'Sinal de GPS indisponível no momento. Tente em área aberta.';
+          } else if (err.code === 3) {
+            msg = 'Tempo limite do GPS excedido. Tentando novamente...';
+          }
+          showToast('Sinal de GPS', msg);
+          if (err.code === 1) {
+            stopNavigationTracking();
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1500,
+          timeout: 15000
+        }
+      );
     }
 
-    function switchAppTab(tabName) {
+    function toggleNavDemoMode() {
+      if (state.nav.isDemoMode) {
+        stopNavigationTracking();
+        return;
+      }
+
+      if (state.nav.isTracking) {
+        stopNavigationTracking();
+      }
+
+      if (!navMap) initNavMap();
+      const coords = getNavigationRouteCoords();
+      if (coords.length < 2) return;
+
+      const cum = buildCumulativeDistances(coords);
+      const totalMeters = cum[cum.length - 1];
+
+      state.nav.isDemoMode = true;
+      state.nav.followGps = true;
+      state.nav.demoProgressMeters = 0;
+      state.nav.lastSpokenKey = '';
+
+      const demoLbl = document.getElementById('navDemoBtnLabel');
+      if (demoLbl) demoLbl.textContent = 'Parar';
+      updateRecenterBtnVisual();
+      updateNavStartStopVisual();
+
+      const simSpeedKmh = Math.max(18, state.cruiseVelocity);
+      const metersPerTick = (simSpeedKmh / 3.6) * 2.2; // Accelerated 2.2x demo speed
+
+      const stepDemo = () => {
+        if (!state.nav.isDemoMode) return;
+        const progress = Math.min(1, state.nav.demoProgressMeters / Math.max(1, totalMeters));
+        const pos = interpolateCoord(coords, progress);
+        const nextPos = interpolateCoord(coords, Math.min(1, progress + 0.008));
+        const heading = computeBearingDeg(pos[0], pos[1], nextPos[0], nextPos[1]);
+
+        handleNavigationPositionUpdate(pos[0], pos[1], simSpeedKmh / 3.6, heading, 6);
+
+        state.nav.demoProgressMeters += metersPerTick;
+        if (state.nav.demoProgressMeters >= totalMeters) {
+          state.nav.demoProgressMeters = totalMeters;
+          const endPos = coords[coords.length - 1];
+          handleNavigationPositionUpdate(endPos[0], endPos[1], 0, heading, 5);
+          showToast('Chegada Simulada!', 'Percurso de teste concluído com sucesso.');
+          stopNavigationTracking();
+        }
+      };
+
+      stepDemo();
+      state.nav.demoTimerId = setInterval(stepDemo, 550);
+    }
+
+    function switchMainTab(tabName) {
       state.activeTab = tabName;
-      const viewSim = document.getElementById('viewSimulator');
       const viewNav = document.getElementById('viewNavigation');
-      const btnSim = document.getElementById('tabBtnSimulator');
+      const viewSim = document.getElementById('viewSimulator');
       const btnNav = document.getElementById('tabBtnNavigation');
+      const btnSim = document.getElementById('tabBtnSimulator');
 
       if (tabName === 'navigation') {
-        stopPlayback();
-        viewSim.classList.add('hidden');
         viewNav.classList.remove('hidden');
+        viewSim.classList.add('hidden');
         btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950 transition';
         btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
+
         setTimeout(() => {
           initNavMap();
           if (navMap) navMap.invalidateSize();
           refreshNavigationRouteLayer();
-        }, 60);
+        }, 40);
       } else {
-        viewNav.classList.add('hidden');
         viewSim.classList.remove('hidden');
+        viewNav.classList.add('hidden');
         btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 font-extrabold text-slate-950 transition';
         btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
+
         setTimeout(() => {
           if (map) map.invalidateSize();
-        }, 60);
+        }, 40);
       }
     }
 
     // =========================================================================
-    // 12. STARTUP HYDRATION & EVENT BINDINGS
+    // 12. EVENT LISTENERS & APPLICATION BOOTSTRAP
     // =========================================================================
     function restoreSavedCustomRoute() {
       for (const key of CUSTOM_ROUTE_STORAGE_KEYS) {
@@ -4436,69 +5368,112 @@
           if (!raw) continue;
           const parsed = JSON.parse(raw);
           if (parsed && Array.isArray(parsed.coords) && parsed.coords.length >= 2) {
-            state.customSavedRoute = {
-              id: 'rota-personalizada',
-              shortTitle: parsed.shortTitle || `★ Meu Trajeto (${parsed.coords.length} pts)`,
-              tag: 'Salva / Oficial',
-              isOfficial: true,
-              isCustom: true,
-              distanceKm: parsed.distanceKm || computePathDistanceKm(parsed.coords),
-              description: parsed.description || `Trajeto personalizado salvo (${parsed.coords.length} waypoints).`,
-              coords: parsed.coords
-            };
-            state.selectedRouteId = 'rota-personalizada';
+            state.customSavedRoute = parsed;
             return;
           }
         } catch (e) {}
       }
     }
 
-    async function autoLoadCachedCiclomapa() {
-      const cached = await loadGeojsonFromIDB();
-      if (cached && Array.isArray(cached.features) && cached.features.length > 0) {
-        renderParsedCiclomapaObject(cached, 'CicloMapa (Cache Auto)');
-        updateCacheStatusUI(`Ativo (${cached.features.length} trechos)`);
-        return;
-      }
-      const fetchedFromRepo = await autoFetchHostedCiclomapa();
-      if (!fetchedFromRepo) {
-        updateCacheStatusUI('Nenhum arquivo no cache');
-      }
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       restoreSavedCustomRoute();
       restoreGluedRoutesCache();
+
       initMap();
       populateVehicleSelect();
       recalculateAll();
       setupDragAndDropGeojson();
-      autoLoadCachedCiclomapa();
+      updateNavVoiceBtnVisual();
 
-      // Open directly on Navegação GPS (Default First Tab)
-      switchAppTab('navigation');
+      // Default tab: Navegação GPS (Android Vertical)
+      switchMainTab('navigation');
 
-      // Auto-glue alternative routes gently on startup if not cached yet
-      if (Object.keys(state.gluedRoutes).length < 3) {
-        setTimeout(() => glueAllAlternativeRoutes({ silent: true }), 900);
+      // Load CicloMapa GeoJSON from IndexedDB cache or auto-fetch hosted GitHub file
+      const cachedGeojson = await loadGeojsonFromIDB();
+      if (cachedGeojson && Array.isArray(cachedGeojson.features) && cachedGeojson.features.length > 0) {
+        renderParsedCiclomapaObject(cachedGeojson, 'CicloMapa (Cache Auto)');
+        updateCacheStatusUI(`Cache ativo (${cachedGeojson.features.length} trechos)`);
       } else {
-        const lbl = document.getElementById('btnGlueLabel');
-        if (lbl) lbl.textContent = 'Rotas Alinhadas ✓';
+        updateCacheStatusUI('Sem cache local');
+        const loadedFromRepo = await autoFetchHostedCiclomapa();
+        if (loadedFromRepo) {
+          showToast('CicloMapa DF Carregado', 'Malha cicloviária real carregada automaticamente.');
+        }
       }
 
-      // Main App Tab Switcher (Simulador vs Navegação GPS Android Vertical)
-      document.getElementById('tabBtnSimulator').addEventListener('click', () => switchAppTab('simulator'));
-      document.getElementById('tabBtnNavigation').addEventListener('click', () => switchAppTab('navigation'));
+      // Primary App Tabs
+      document.getElementById('tabBtnNavigation').addEventListener('click', () => switchMainTab('navigation'));
+      document.getElementById('tabBtnSimulator').addEventListener('click', () => switchMainTab('simulator'));
 
-      // Smart A -> B Route Planner Events
+      // File Inputs & Drive Sync Modal
+      document.getElementById('btnOpenGeojsonPicker').addEventListener('click', () => {
+        document.getElementById('geojsonFileInput').click();
+      });
+      document.getElementById('btnModalLocalUpload').addEventListener('click', () => {
+        document.getElementById('geojsonFileInput').click();
+      });
+      document.getElementById('geojsonFileInput').addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) processLocalGeojsonFile(file);
+        e.target.value = '';
+      });
+
+      document.getElementById('btnImportRoutePreset').addEventListener('click', () => {
+        document.getElementById('routePresetInput').click();
+      });
+      document.getElementById('routePresetInput').addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) handleRoutePresetFile(file);
+        e.target.value = '';
+      });
+      document.getElementById('btnExportRoutePreset').addEventListener('click', exportActiveRouteAsFile);
+
+      document.getElementById('btnOpenDriveModal').addEventListener('click', openDriveModal);
+      document.getElementById('btnCloseDriveModal').addEventListener('click', closeDriveModal);
+      document.getElementById('driveModal').addEventListener('click', (e) => {
+        if (e.target.id === 'driveModal') closeDriveModal();
+      });
+      document.getElementById('btnTriggerDriveSync').addEventListener('click', () => {
+        fetchGeojsonFromUrl(document.getElementById('driveUrlInput').value);
+      });
+      document.getElementById('btnClearGeojsonCache').addEventListener('click', async () => {
+        await clearGeojsonFromIDB();
+        state.loadedCiclomapaGeojson = null;
+        renderDefaultCiclomapaLayer();
+        showToast('Cache Limpo', 'Mapa restaurado para a malha base da Asa Norte.');
+      });
+
+      // Smart A -> B Route Planner Listeners
       document.querySelectorAll('.plan-profile-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           state.planner.profile = btn.dataset.planProfile;
           document.querySelectorAll('.plan-profile-btn').forEach(b => {
-            b.className = 'plan-profile-btn rounded-md px-2.5 py-1 font-semibold text-slate-400 transition hover:text-white';
+            const active = b.dataset.planProfile === state.planner.profile;
+            b.className = active
+              ? 'plan-profile-btn rounded-md bg-emerald-500 px-2.5 py-1 font-extrabold text-slate-950 transition'
+              : 'plan-profile-btn rounded-md px-2.5 py-1 font-semibold text-slate-400 transition hover:text-white';
           });
-          btn.className = 'plan-profile-btn rounded-md bg-emerald-500 px-2.5 py-1 font-extrabold text-slate-950 transition';
         });
+      });
+
+      document.getElementById('btnUseGpsOrigin').addEventListener('click', () => {
+        if (!('geolocation' in navigator)) {
+          showToast('GPS Indisponível', 'Use o botão 📍 para marcar sua origem no mapa.');
+          return;
+        }
+        showToast('Obtendo GPS...', 'Aguarde enquanto localizamos seu ponto de partida.');
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const pt = [+pos.coords.latitude.toFixed(6), +pos.coords.longitude.toFixed(6)];
+            state.planner.originCoords = pt;
+            document.getElementById('planOriginInput').value = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
+            showToast('Origem GPS Definida!', 'Agora informe o destino (B) e clique em Calcular.');
+          },
+          () => {
+            showToast('GPS não autorizado', 'Permita o acesso à localização ou marque a origem com 📍.');
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
       });
 
       document.getElementById('btnPickOriginMap').addEventListener('click', () => setPlannerPickMode('origin'));
@@ -4511,206 +5486,115 @@
         const tmpVal = origIn.value;
         origIn.value = destIn.value;
         destIn.value = tmpVal;
-        const tmpC = state.planner.originCoords;
-        state.planner.originCoords = state.planner.destCoords;
-        state.planner.destCoords = tmpC;
-      });
 
-      document.getElementById('btnUseGpsOrigin').addEventListener('click', () => {
-        if (!('geolocation' in navigator)) {
-          showToast('GPS Indisponível', 'Digite sua origem ou use 📍 no mapa.');
-          return;
-        }
-        showToast('Obtendo GPS...', 'Buscando sua localização atual para a Origem (A).');
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const pt = [+pos.coords.latitude.toFixed(6), +pos.coords.longitude.toFixed(6)];
-            state.planner.originCoords = pt;
-            document.getElementById('planOriginInput').value = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
-            showToast('Origem GPS Definida!', 'Agora informe o Destino (B) e clique em Calcular.');
-          },
-          () => showToast('Sem Sinal GPS', 'Ative a localização ou marque a origem no mapa (📍).'),
-          { enableHighAccuracy: true, timeout: 8000 }
-        );
+        const tmpCoords = state.planner.originCoords;
+        state.planner.originCoords = state.planner.destCoords;
+        state.planner.destCoords = tmpCoords;
       });
 
       document.getElementById('btnCalcSmartRoute').addEventListener('click', calculateSmartOriginDestRoute);
+      ['planOriginInput', 'planDestInput'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') calculateSmartOriginDestRoute();
+        });
+      });
+
+      document.getElementById('btnAdjustPlannedRoute').addEventListener('click', () => {
+        toggleRouteEditMode(true);
+      });
       document.getElementById('btnLaunchPlannedNav').addEventListener('click', () => {
         state.nav.reversed = false;
-        switchAppTab('navigation');
+        switchMainTab('navigation');
       });
 
-      // Route Gluing Button
-      document.getElementById('btnGlueRoutes').addEventListener('click', () => {
-        glueAllAlternativeRoutes({ silent: false, preferLocalSnap: false });
+      // Google Maps-Style Route Customization Controls
+      document.getElementById('btnToggleRouteEdit').addEventListener('click', () => toggleRouteEditMode());
+      document.getElementById('toggleEditSnapCycle').addEventListener('change', (e) => {
+        state.routeEditor.snapToCycle = e.target.checked;
       });
+      document.getElementById('btnEditUndo').addEventListener('click', undoRouteEditStep);
+      document.getElementById('btnEditSave').addEventListener('click', saveEditedRouteAsOfficial);
+      document.getElementById('btnEditDone').addEventListener('click', () => toggleRouteEditMode(false));
 
-      // GPS Navigation HUD Controls
-      document.getElementById('btnNavStartStopGps').addEventListener('click', () => {
-        if (state.nav.isTracking) stopLiveGPSNavigation();
-        else startLiveGPSNavigation();
-      });
-      document.getElementById('btnNavDemoSim').addEventListener('click', toggleDemoGPSNavigation);
-
-      document.getElementById('btnNavRecenter').addEventListener('click', () => {
-        state.nav.followGps = true;
-        updateRecenterBtnVisual();
-        if (state.nav.currentPos && navMap) {
-          navMap.setView(state.nav.currentPos, 17, { animate: true });
-        } else {
-          refreshNavigationRouteLayer();
-        }
-      });
-
-      document.getElementById('btnNavRecenterAlert').addEventListener('click', () => {
-        const coords = getNavigationRouteCoords();
-        if (navMap && coords.length >= 2) {
-          state.nav.followGps = false;
-          updateRecenterBtnVisual();
-          navMap.fitBounds(L.latLngBounds(coords), { padding: [60, 80] });
-        }
-      });
-
-      document.getElementById('btnNavVoiceToggle').addEventListener('click', () => {
-        state.nav.voiceEnabled = !state.nav.voiceEnabled;
-        document.getElementById('btnNavVoiceToggle').textContent = state.nav.voiceEnabled ? '🔊' : '🔇';
-        showToast('Instruções por Voz', state.nav.voiceEnabled ? 'Áudio PT-BR ativado' : 'Áudio silenciado');
-      });
-
-      document.getElementById('btnNavThemeToggle').addEventListener('click', () => {
-        state.nav.lightTheme = !state.nav.lightTheme;
-        applyNavBasemapTheme();
-      });
-
-      document.getElementById('btnNavFlipDirection').addEventListener('click', () => {
-        state.nav.reversed = !state.nav.reversed;
-        state.nav.demoProgressMeters = 0;
-        state.nav.lastSpokenKey = '';
-        refreshNavigationRouteLayer();
-        showToast('Sentido Invertido', state.nav.reversed ? 'Volta: 711 Norte → Câmara / Três Poderes' : 'Ida: Câmara / Três Poderes → 711 Norte');
-      });
-
-      document.getElementById('navRouteSelect').addEventListener('change', e => {
-        state.selectedRouteId = e.target.value;
-        state.nav.demoProgressMeters = 0;
-        state.nav.lastSpokenKey = '';
-        drawSelectedRouteOnMap();
-        recalculateAll();
-        refreshNavigationRouteLayer();
-      });
-
-      window.addEventListener('resize', () => {
-        if (state.activeTab === 'navigation' && navMap) navMap.invalidateSize();
-      });
-
-      // Basemap Switcher
-      document.querySelectorAll('.basemap-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const target = btn.dataset.basemap;
-          if (target === state.activeBasemap) return;
-          applyBasemapMode(target);
-          document.querySelectorAll('.basemap-btn').forEach(b => {
-            b.className = 'basemap-btn rounded-lg px-2.5 py-1 font-medium text-slate-400 transition hover:text-white';
-          });
-          btn.className = 'basemap-btn rounded-lg bg-sky-500 px-2.5 py-1 font-bold text-slate-950 transition';
-        });
-      });
-
-      // Destination Switcher
-      document.querySelectorAll('.dest-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          state.destinationKey = btn.dataset.dest;
-          document.getElementById('headerDestLabel').textContent = DESTINATIONS[state.destinationKey].label;
-          document.querySelectorAll('.dest-btn').forEach(b => {
-            b.className = 'dest-btn rounded-md px-2 py-0.5 font-semibold text-slate-400 transition hover:text-white';
-          });
-          btn.className = 'dest-btn rounded-md bg-sky-500 px-2 py-0.5 font-bold text-slate-950 transition';
-          drawSelectedRouteOnMap();
-          recalculateAll();
-        });
-      });
-
-      // Map Layer Checkboxes
-      document.getElementById('toggleNetwork').addEventListener('change', e => {
-        e.target.checked ? ciclomapaLayerGroup.addTo(map) : map.removeLayer(ciclomapaLayerGroup);
-      });
-      document.getElementById('toggleSlowdownPins').addEventListener('change', e => {
-        e.target.checked ? slowdownLayerGroup.addTo(map) : map.removeLayer(slowdownLayerGroup);
-      });
-
-      // Drawing Mode Controls
+      // Custom Route Drawing Controls
       document.getElementById('btnToggleDrawMode').addEventListener('click', () => toggleCustomDrawMode());
-      document.getElementById('btnCancelDraw').addEventListener('click', () => toggleCustomDrawMode(false));
+      document.getElementById('toggleSnapCycle').addEventListener('change', (e) => {
+        state.snapToCycle = e.target.checked;
+      });
       document.getElementById('btnUndoPoint').addEventListener('click', undoLastDrawnStep);
       document.getElementById('btnClearDraft').addEventListener('click', () => {
         state.drawnPoints = [];
         state.drawUndoStack = [];
-        clearSnapPreviewVisuals();
         redrawCustomDraft();
       });
       document.getElementById('btnSaveDraftRoute').addEventListener('click', saveDraftAsOfficialRoute);
-      document.getElementById('toggleSnapCycle').addEventListener('change', e => {
-        state.snapToCycle = e.target.checked;
-        if (!state.snapToCycle) clearSnapPreviewVisuals();
+      document.getElementById('btnCancelDraw').addEventListener('click', () => toggleCustomDrawMode(false));
+
+      // Basemap Switcher (Simulator)
+      document.querySelectorAll('.basemap-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mode = btn.dataset.basemap;
+          applyBasemapMode(mode);
+          document.querySelectorAll('.basemap-btn').forEach(b => {
+            b.className = b.dataset.basemap === mode
+              ? 'basemap-btn rounded-lg bg-sky-500 px-2.5 py-1 font-bold text-slate-950 transition'
+              : 'basemap-btn rounded-lg px-2.5 py-1 font-medium text-slate-400 transition hover:text-white';
+          });
+        });
       });
 
-      // Route Preset Export / Import
-      document.getElementById('btnExportRoutePreset').addEventListener('click', exportActiveRouteAsFile);
-      document.getElementById('btnImportRoutePreset').addEventListener('click', () => {
-        document.getElementById('routePresetInput').click();
+      // Layer Toggles
+      document.getElementById('toggleNetwork').addEventListener('change', (e) => {
+        if (!map) return;
+        e.target.checked ? ciclomapaLayerGroup.addTo(map) : map.removeLayer(ciclomapaLayerGroup);
       });
-      document.getElementById('routePresetInput').addEventListener('change', e => {
-        const f = e.target.files?.[0];
-        if (f) handleRoutePresetFile(f);
-        e.target.value = '';
-      });
-
-      // CicloMapa GeoJSON File Picker & Drive Modal
-      document.getElementById('btnOpenGeojsonPicker').addEventListener('click', () => {
-        document.getElementById('geojsonFileInput').click();
-      });
-      document.getElementById('btnModalLocalUpload').addEventListener('click', () => {
-        document.getElementById('geojsonFileInput').click();
-      });
-      document.getElementById('geojsonFileInput').addEventListener('change', e => {
-        const f = e.target.files?.[0];
-        if (f) processLocalGeojsonFile(f);
-        e.target.value = '';
+      document.getElementById('toggleSlowdownPins').addEventListener('change', (e) => {
+        if (!map) return;
+        e.target.checked ? slowdownLayerGroup.addTo(map) : map.removeLayer(slowdownLayerGroup);
       });
 
-      document.getElementById('btnOpenDriveModal').addEventListener('click', openDriveModal);
-      document.getElementById('btnCloseDriveModal').addEventListener('click', closeDriveModal);
-      document.getElementById('driveModal').addEventListener('click', e => {
-        if (e.target.id === 'driveModal') closeDriveModal();
-      });
-      document.getElementById('btnTriggerDriveSync').addEventListener('click', () => {
-        fetchGeojsonFromUrl(document.getElementById('driveUrlInput').value);
-      });
-      document.getElementById('btnClearGeojsonCache').addEventListener('click', async () => {
-        await clearGeojsonFromIDB();
-        renderDefaultCiclomapaLayer();
-        showToast('Cache Limpo', 'Malha padrão restaurada.');
+      // Destination Switcher (711N vs SGAN 912)
+      document.querySelectorAll('.dest-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.destinationKey = btn.dataset.dest;
+          const destObj = DESTINATIONS[state.destinationKey];
+          document.getElementById('headerDestLabel').textContent = destObj.label;
+          document.querySelectorAll('.dest-btn').forEach(b => {
+            b.className = b.dataset.dest === state.destinationKey
+              ? 'dest-btn rounded-md bg-sky-500 px-2 py-0.5 font-bold text-slate-950 transition'
+              : 'dest-btn rounded-md px-2 py-0.5 font-semibold text-slate-400 transition hover:text-white';
+          });
+          resetPlayback();
+          drawSelectedRouteOnMap();
+          recalculateAll();
+          if (navMap) refreshNavigationRouteLayer();
+        });
       });
 
-      // Playback Controls
+      // Playback & Route Glue Controls
       document.getElementById('btnPlayPause').addEventListener('click', togglePlayback);
       document.getElementById('btnResetPlayback').addEventListener('click', resetPlayback);
-      document.getElementById('playbackSlider').addEventListener('input', e => {
+      document.getElementById('playbackSlider').addEventListener('input', (e) => {
         stopPlayback();
         state.playback.progress = Number(e.target.value) / 1000;
         updatePlaybackPosition(state.playback.progress);
       });
+      document.getElementById('btnGlueRoutes').addEventListener('click', () => {
+        glueAllAlternativeRoutes({ silent: false });
+      });
 
-      // Vehicle & Simulation Controls
-      document.getElementById('vehicleSelect').addEventListener('change', e => selectVehicle(e.target.value, false));
-      document.getElementById('cruiseSpeedSlider').addEventListener('input', e => {
+      // Cockpit Vehicle, Speed, Weight & Trip Controls
+      document.getElementById('vehicleSelect').addEventListener('change', (e) => {
+        selectVehicle(e.target.value, false);
+      });
+      document.getElementById('cruiseSpeedSlider').addEventListener('input', (e) => {
         state.cruiseVelocity = Number(e.target.value);
         recalculateAll();
       });
       document.querySelectorAll('.quick-speed-btn').forEach(btn => {
         btn.addEventListener('click', () => setQuickVelocity(Number(btn.dataset.quickSpeed)));
       });
-      document.getElementById('weightSlider').addEventListener('input', e => {
+      document.getElementById('weightSlider').addEventListener('input', (e) => {
         state.riderWeightKg = Number(e.target.value);
         recalculateAll();
       });
@@ -4722,32 +5606,97 @@
         state.isRoundTrip = true;
         recalculateAll();
       });
-      document.getElementById('toggleSlowdownModel').addEventListener('change', e => {
+      document.getElementById('toggleSlowdownModel').addEventListener('change', (e) => {
         state.includeSlowdowns = e.target.checked;
         recalculateAll();
       });
 
-      // Catalog Filters & Comparator Reset
+      // Catalog Filters, Sort & Comparison Reset
       document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           state.catalogFilter = btn.dataset.filter;
           document.querySelectorAll('.filter-btn').forEach(b => {
-            b.className = 'filter-btn rounded-lg px-3 py-1.5 font-medium text-slate-400 transition hover:text-white';
+            b.className = b.dataset.filter === state.catalogFilter
+              ? 'filter-btn rounded-lg bg-sky-500 px-3 py-1.5 font-bold text-slate-950 transition'
+              : 'filter-btn rounded-lg px-3 py-1.5 font-medium text-slate-400 transition hover:text-white';
           });
-          btn.className = 'filter-btn rounded-lg bg-sky-500 px-3 py-1.5 font-bold text-slate-950 transition';
           renderCatalog();
         });
       });
-      document.getElementById('catalogSort').addEventListener('change', e => {
+      document.getElementById('catalogSort').addEventListener('change', (e) => {
         state.catalogSort = e.target.value;
         renderCatalog();
       });
       document.getElementById('btnResetCompare').addEventListener('click', () => {
         state.compareIds = ['foston-s09-pro', 'segway-ninebot-f2-pro', 'honeywhale-s6-s'];
-        document.getElementById('headerCompareCount').textContent = state.compareIds.length;
+        document.getElementById('headerCompareCount').textContent = '3';
         renderCatalog();
         renderComparisonTable();
-        showToast('Comparador Restaurado', 'Top 3 modelos restaurados.');
+        showToast('Comparador', 'Restaurado para os 3 modelos em destaque.');
+      });
+
+      // Live GPS Navigation Controls
+      document.getElementById('btnNavStartStopGps').addEventListener('click', startLiveGpsNavigation);
+      document.getElementById('btnNavDemoSim').addEventListener('click', toggleNavDemoMode);
+
+      const recenterHandler = () => {
+        state.nav.followGps = true;
+        updateRecenterBtnVisual();
+        if (!navMap) return;
+        if (state.nav.currentPos) {
+          navMap.setView(state.nav.currentPos, Math.max(navMap.getZoom(), 16), { animate: true });
+        } else {
+          const coords = getNavigationRouteCoords();
+          if (coords.length >= 2) navMap.fitBounds(L.latLngBounds(coords), { padding: [70, 90] });
+        }
+      };
+      document.getElementById('btnNavRecenter').addEventListener('click', recenterHandler);
+      document.getElementById('btnNavRecenterAlert').addEventListener('click', recenterHandler);
+
+      document.getElementById('btnNavVoiceToggle').addEventListener('click', () => {
+        state.nav.voiceEnabled = !state.nav.voiceEnabled;
+        updateNavVoiceBtnVisual();
+        if (state.nav.voiceEnabled) {
+          speakNavInstruction('Instruções de voz ativadas.');
+          showToast('Voz PT-BR Ativada', 'Você receberá avisos antes de curvas e cruzamentos.');
+        } else {
+          if ('speechSynthesis' in window) {
+            try { window.speechSynthesis.cancel(); } catch (e) {}
+          }
+          showToast('Áudio Silenciado', 'Navegação mantida no modo silencioso.');
+        }
+      });
+
+      document.getElementById('btnNavThemeToggle').addEventListener('click', () => {
+        state.nav.lightTheme = !state.nav.lightTheme;
+        applyNavBasemapTheme();
+      });
+
+      document.getElementById('btnNavFlipDirection').addEventListener('click', () => {
+        state.nav.reversed = !state.nav.reversed;
+        state.nav.lastSpokenKey = '';
+        refreshNavigationRouteLayer();
+        showToast('Sentido Invertido', state.nav.reversed ? 'Navegando sentido Volta (Câmara).' : 'Navegando sentido Ida.');
+      });
+
+      document.getElementById('navRouteSelect').addEventListener('change', (e) => {
+        state.selectedRouteId = e.target.value;
+        state.nav.lastSpokenKey = '';
+        drawSelectedRouteOnMap();
+        recalculateAll();
+        refreshNavigationRouteLayer();
+      });
+
+      // Handle window resize & Wake Lock re-acquisition on Android tab resume
+      window.addEventListener('resize', () => {
+        if (map) map.invalidateSize();
+        if (navMap) navMap.invalidateSize();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && state.nav.isTracking) {
+          requestWakeLock();
+        }
       });
     });
   </script>
