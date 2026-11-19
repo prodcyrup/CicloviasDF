@@ -158,6 +158,23 @@
       isolation: isolate;
     }
 
+    /* Smooth 360-degree rotatable navigation map stage (oversized to prevent blank corners) */
+    #navMapRotator {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform-origin: center center;
+      will-change: transform;
+      touch-action: none;
+    }
+
+    /* Keep text badges & warning triangles upright while the navigation map rotates */
+    #navMapRotator .nav-upright-marker {
+      transform: rotate(var(--nav-counter-rot, 0deg));
+      transform-origin: center center;
+      will-change: transform;
+    }
+
     /* Map pick-point mode cursor for A->B Route Planner */
     #map.picking-point,
     #map.picking-point .leaflet-grab {
@@ -212,8 +229,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
 
-  <!-- Hidden File Inputs for CicloMapa GeoJSON & Custom Route Presets -->
-  <input type="file" id="geojsonFileInput" accept=".geojson,.json" class="hidden" />
+  <!-- Hidden File Input for Custom Route Presets -->
   <input type="file" id="routePresetInput" accept=".geojson,.json" class="hidden" />
 
   <!-- Top Sticky Header -->
@@ -253,33 +269,6 @@
           <span>Simulador</span>
         </button>
       </nav>
-
-      <!-- Top Action Buttons (Hidden on small screens while in GPS Nav) -->
-      <div id="headerExtraActions" class="hidden flex-wrap items-center gap-2 lg:flex">
-        <button type="button" id="btnOpenGeojsonPicker"
-          class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500 hover:text-slate-950">
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-          </svg>
-          <span>Importar CicloMapa</span>
-        </button>
-
-        <button type="button" id="btnOpenDriveModal"
-          class="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500/20">
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-          </svg>
-          <span>Drive / URL Sync</span>
-        </button>
-
-        <a href="#catalogo" class="hidden rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-700 hover:text-white xl:inline-flex">
-          9 Modelos
-        </a>
-        <a href="#comparador" class="inline-flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-300 transition hover:bg-purple-500/20">
-          <span>Comparar</span>
-          <span id="headerCompareCount" class="rounded-full bg-purple-500 px-1.5 py-0.2 text-[10px] font-bold text-slate-950">3</span>
-        </a>
-      </div>
     </div>
   </header>
 
@@ -518,12 +507,6 @@
                 <span>⚠️ Travessias Perigosas</span>
               </label>
             </div>
-
-            <!-- Destination Switcher -->
-            <div class="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-[10px]">
-              <button type="button" data-dest="711n" class="dest-btn rounded-md bg-sky-500 px-2 py-0.5 font-bold text-slate-950 transition">711 Norte</button>
-              <button type="button" data-dest="912n" class="dest-btn rounded-md px-2 py-0.5 font-semibold text-slate-400 transition hover:text-white">SGAN 912</button>
-            </div>
           </div>
 
           <!-- Leaflet Map Canvas -->
@@ -547,11 +530,6 @@
                   <span>Ciclofaixas / Calçadas</span>
                 </div>
               </div>
-            </div>
-
-            <!-- Drag & Drop Hint Pill -->
-            <div class="pointer-events-none absolute right-3 top-3 z-20 hidden rounded-lg border border-slate-800/80 bg-slate-950/80 px-2.5 py-1 text-[10px] text-slate-400 backdrop-blur-md md:block">
-              Arraste um <span class="font-mono text-emerald-400">.geojson</span> do CicloMapa aqui
             </div>
           </div>
 
@@ -824,9 +802,11 @@
   <!-- TAB 1 (DEFAULT): ANDROID VERTICAL / HANDLEBAR LIVE GPS NAVIGATION (WAZE & GOOGLE MAPS CLEAN MODE) -->
   <section id="viewNavigation" class="relative h-[calc(100dvh-52px)] w-full overflow-hidden bg-slate-950 select-none">
 
-    <!-- Full-Viewport Native Touch Map Container -->
+    <!-- Full-Viewport Rotatable & Pinch-Zoomable Touch Map Container -->
     <div id="navMapViewport" class="relative h-full w-full overflow-hidden bg-slate-950">
-      <div id="navMap" class="relative z-0 h-full w-full"></div>
+      <div id="navMapRotator" class="z-0">
+        <div id="navMap" class="relative z-0 h-full w-full"></div>
+      </div>
 
       <!-- TOP FLOATING TURN-BY-TURN BANNER (Clean Waze / Google Maps Style) -->
       <div class="pointer-events-none absolute inset-x-0 top-0 z-[1000] mx-auto max-w-md px-3 pt-2.5 sm:max-w-lg">
@@ -864,21 +844,32 @@
           </button>
         </div>
 
-        <!-- Upcoming Arterial Crossing Alert Pill -->
-        <div id="navCrossingPill" class="pointer-events-auto mt-1.5 hidden items-center gap-2.5 rounded-xl border-2 border-rose-500/80 bg-rose-950/95 px-3 py-2 text-xs text-rose-100 shadow-2xl backdrop-blur-md">
-          <span class="flex h-7 w-7 shrink-0 animate-pulse items-center justify-center rounded-lg bg-rose-500 text-sm font-extrabold text-white shadow">⚠️</span>
+        <!-- Upcoming Dangerous Arterial Crossing Banner (Shown within 220m of L2 / Eixão / W3 / N1 / L4) -->
+        <div id="navCrossingPill" class="pointer-events-auto mt-2 hidden items-center gap-2.5 rounded-xl border-2 border-rose-400 bg-rose-950/95 px-3 py-2 text-xs text-rose-100 shadow-2xl backdrop-blur-md">
+          <span class="flex h-7 w-7 shrink-0 animate-pulse items-center justify-center rounded-lg bg-rose-500 text-sm text-white shadow">⚠️</span>
           <div class="min-w-0 flex-1">
-            <div id="navCrossingText" class="truncate font-extrabold text-white">TRAVESSIA PERIGOSA À FRENTE</div>
-            <div id="navCrossingSubtext" class="truncate text-[10px] font-medium text-rose-200">Reduza a velocidade e olhe os dois lados</div>
+            <div class="text-[10px] font-black uppercase tracking-wider text-rose-300">Travessia Perigosa à Frente</div>
+            <div id="navCrossingText" class="truncate text-xs font-extrabold text-white">Travessia Arterial</div>
+            <div id="navCrossingSubtext" class="truncate text-[10px] text-rose-200/85">Reduza a velocidade e atenção aos carros.</div>
           </div>
         </div>
       </div>
 
-      <!-- RIGHT FLOATING HANDLEBAR CONTROLS (Only 3 Essential Uncluttered Buttons) -->
+      <!-- RIGHT FLOATING HANDLEBAR CONTROLS (Clean Waze / Google Maps Controls) -->
       <div class="absolute right-3 top-1/2 z-[1000] flex -translate-y-1/2 flex-col gap-2.5">
-        <button type="button" id="btnNavRecenter" title="Centralizar no GPS"
+        <button type="button" id="btnNavRecenter" title="Centralizar no GPS e seguir direção"
           class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
           🎯
+        </button>
+
+        <button type="button" id="btnNavCompassMode" title="Bússola: Seguir direção do celular / Norte Fixo (toque para alternar)"
+          class="flex h-12 w-12 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95">
+          <svg id="navCompassNeedleSvg" class="h-6 w-6 transition-transform duration-150" viewBox="0 0 24 24" fill="none">
+            <polygon points="12,2 16,12 12,10 8,12" fill="#f43f5e" />
+            <polygon points="12,22 16,12 12,14 8,12" fill="#e2e8f0" />
+            <circle cx="12" cy="12" r="1.8" fill="#0f172a" />
+          </svg>
+          <span id="navCompassModeTag" class="text-[8px] font-black uppercase leading-none tracking-tight text-emerald-300">AUTO</span>
         </button>
 
         <button type="button" id="btnNavVoiceToggle" title="Áudio desligado (toque para ativar voz PT-BR)"
@@ -960,60 +951,6 @@
 
     </div>
   </section>
-
-  <!-- Drive / URL GeoJSON Sync Modal -->
-  <div id="driveModal" class="fixed inset-0 z-[1300] hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-    <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
-      <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
-        <div>
-          <span class="text-[10px] font-bold uppercase tracking-wider text-sky-400">Malha Cicloviária Real (CicloMapa)</span>
-          <h3 class="text-base font-extrabold text-white">Sincronizar GeoJSON (Google Drive ou Arquivo Local)</h3>
-        </div>
-        <button type="button" id="btnCloseDriveModal" class="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-400 hover:text-white">✕</button>
-      </div>
-
-      <div class="mt-4 space-y-4 text-xs">
-        <div>
-          <label for="driveUrlInput" class="mb-1.5 block font-semibold text-slate-300">Link do Google Drive, GitHub Raw ou Dropbox:</label>
-          <div class="flex gap-2">
-            <input type="url" id="driveUrlInput"
-              value="https://drive.google.com/file/d/1vHnAPAnrsgpeGpsxR-Zx021k9PacsRrm/view?usp=sharing"
-              class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-[11px] text-slate-200 focus:border-sky-500 focus:outline-none" />
-            <button type="button" id="btnTriggerDriveSync"
-              class="shrink-0 rounded-xl bg-sky-500 px-4 py-2 font-extrabold text-slate-950 transition hover:bg-sky-400">
-              Sincronizar
-            </button>
-          </div>
-          <div id="driveSyncFeedback" class="mt-2 hidden rounded-xl border p-2.5 text-[11px] leading-relaxed"></div>
-        </div>
-
-        <div class="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-2.5">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-emerald-400">⚡ Recomendado: Cache Permanente (IndexedDB)</span>
-            <span id="cacheStatusLabel" class="font-mono text-[10px] text-slate-400">Verificando cache...</span>
-          </div>
-          <p class="leading-relaxed text-slate-400">
-            O Google Drive bloqueia downloads diretos via <code class="text-slate-300">fetch()</code> no navegador por política CORS em arquivos GeoJSON grandes (vários MBs com limites da RIDE-DF).
-            Ao selecionar o arquivo do seu PC <strong>uma única vez</strong>, o app remove os limites municipais pesados e salva a malha de Brasília no <strong>IndexedDB do navegador</strong> — nas próximas vezes ela carrega <strong>100% automático</strong>.
-          </p>
-          <div class="flex flex-wrap items-center gap-2 pt-1">
-            <button type="button" id="btnModalLocalUpload"
-              class="rounded-xl bg-emerald-500 px-3.5 py-2 font-extrabold text-slate-950 transition hover:bg-emerald-400">
-              📂 Carregar .geojson do PC (Salva Auto)
-            </button>
-            <a id="btnDirectDriveDownload" href="https://drive.google.com/uc?export=download&id=1vHnAPAnrsgpeGpsxR-Zx021k9PacsRrm" target="_blank" rel="noopener noreferrer"
-              class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-semibold text-sky-300 transition hover:border-sky-500">
-              Baixar do Drive ↗
-            </a>
-            <button type="button" id="btnClearGeojsonCache"
-              class="ml-auto rounded-xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-[11px] font-semibold text-rose-300 hover:bg-rose-500/20">
-              Limpar Cache
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Toast Notification -->
   <div id="toastBox" class="pointer-events-none fixed bottom-5 right-5 z-[1400] translate-y-6 opacity-0 transition-all duration-300">
@@ -1098,107 +1035,90 @@
       [-47.89635, -15.757129], [-47.895635, -15.756824], [-47.8957, -15.756483]
     ];
 
-    // Major Brasília arterial crossings where ciclovias intersect fast avenues
-    const ARTERIAL_CROSSINGS = [
+    // Major Brasília arterial avenue centerlines used for exact perpendicular intersection detection.
+    // A danger crossing warning is placed ONLY at the exact intersection where a route cuts across a main via (~40°–90°).
+    const MAJOR_ARTERIAL_VIAS = [
       {
-        id: 'l2-norte-esplanada',
-        name: 'Travessia L2 Norte (Esplanada/SBN)',
+        id: 'l2-norte',
+        name: 'Travessia Via L2 Norte',
         shortTag: 'L2',
         danger: 'alta',
-        coords: [-15.7918, -47.8758],
-        radiusMeters: 420,
-        delaySec: 40,
-        note: 'Semáforo de alto fluxo e conversão da Via N1 para a Ciclovia L2 Norte / SBN.'
+        delaySec: 55,
+        note: 'Fim de ciclovia / cruzamento transversal na Via L2 Norte. Atenção aos carros em alta velocidade.',
+        coords: [
+          [-15.8020, -47.8774],
+          [-15.7950, -47.8760],
+          [-15.7910, -47.8755],
+          [-15.78525, -47.8758],
+          [-15.7745, -47.8766],
+          [-15.7653, -47.8789],
+          [-15.7570, -47.8815],
+          [-15.7470, -47.8848]
+        ]
       },
       {
-        id: 'l2-norte-406',
-        name: 'Travessia Via L2 Norte (406/408N)',
-        shortTag: 'L2',
-        danger: 'alta',
-        coords: [-15.7715, -47.8758],
-        radiusMeters: 360,
-        delaySec: 35,
-        note: 'Faixa/cruzamento na Via L2 Norte com carros em alta velocidade. Reduza e aguarde abertura total.'
-      },
-      {
-        id: 'l2-norte-410',
-        name: 'Travessia Via L2 Norte (410/412N)',
-        shortTag: 'L2',
-        danger: 'alta',
-        coords: [-15.7582, -47.8794],
-        radiusMeters: 360,
-        delaySec: 35,
-        note: 'Cruzamento da L2 Norte próximo ao acesso da UnB / 112 Norte.'
-      },
-      {
-        id: 'eixao-travessia',
-        name: 'Travessia Eixão Norte (102/104N)',
+        id: 'eixao-norte',
+        name: 'Travessia Eixão Norte',
         shortTag: 'EIXÃO',
         danger: 'alta',
-        coords: [-15.7830, -47.8832],
-        radiusMeters: 520,
-        delaySec: 80,
-        note: 'Atenção máxima: rampa e passagem subterrânea do Eixão (80 km/h). Desça devagar.'
-      },
-      {
-        id: 'eixao-108n',
-        name: 'Passagem Eixão Norte (106/108N)',
-        shortTag: 'EIXÃO',
-        danger: 'alta',
-        coords: [-15.7685, -47.8848],
-        radiusMeters: 420,
-        delaySec: 70,
-        note: 'Acesso à passagem inferior do Eixão Norte (106/108N). Atenção nas entradas dos eixinhos.'
-      },
-      {
-        id: 'eixao-110n',
-        name: 'Passagem Eixão Norte (110/112N)',
-        shortTag: 'EIXÃO',
-        danger: 'alta',
-        coords: [-15.7574, -47.8832],
-        radiusMeters: 450,
-        delaySec: 75,
-        note: 'Passagem subterrânea do Eixão na 110/112N — cuidado com carros entrando nos eixinhos.'
+        delaySec: 95,
+        note: 'Cruzamento do Eixo Rodoviário (80 km/h) e eixinhos. Reduza a velocidade e use a passagem segura.',
+        coords: [
+          [-15.8060, -47.8860],
+          [-15.7934, -47.8825],
+          [-15.7837, -47.8820],
+          [-15.7745, -47.8826],
+          [-15.7653, -47.8849],
+          [-15.7570, -47.8875],
+          [-15.7470, -47.8908]
+        ]
       },
       {
         id: 'w3-norte',
-        name: 'Travessia Av. W3 Norte (702/704N)',
+        name: 'Travessia Av. W3 Norte',
         shortTag: 'W3',
         danger: 'alta',
-        coords: [-15.7805, -47.8902],
-        radiusMeters: 480,
-        delaySec: 55,
-        note: 'Cruzamento perigoso na Av. W3 Norte com faixa exclusiva de ônibus e múltiplos semáforos.'
+        delaySec: 70,
+        note: 'Fim de ciclovia / cruzamento na Av. W3 Norte com faixa exclusiva de ônibus. Atravesse apenas com sinal verde.',
+        coords: [
+          [-15.8050, -47.8940],
+          [-15.7934, -47.8888],
+          [-15.78335, -47.8886],
+          [-15.7745, -47.8891],
+          [-15.7653, -47.8914],
+          [-15.7570, -47.8939],
+          [-15.7470, -47.8972]
+        ]
       },
       {
-        id: 'w3-708n',
-        name: 'Travessia Av. W3 Norte (708/710N)',
-        shortTag: 'W3',
+        id: 'via-n1',
+        name: 'Travessia Via N1 (Eixo Monumental)',
+        shortTag: 'N1',
         danger: 'alta',
-        coords: [-15.7662, -47.8914],
-        radiusMeters: 360,
-        delaySec: 50,
-        note: 'Travessia semafórica na W3 Norte com ônibus rápidos — atravesse somente no verde.'
+        delaySec: 60,
+        note: 'Travessia transversal das 6 faixas do Eixo Monumental (Via N1). Utilize a faixa semafórica.',
+        coords: [
+          [-15.7998, -47.8615],
+          [-15.7950, -47.8758],
+          [-15.7924, -47.8830],
+          [-15.7885, -47.8950],
+          [-15.7845, -47.9070]
+        ]
       },
       {
-        id: 'w3-711n',
-        name: 'Travessia Av. W3 Norte (711/112N)',
-        shortTag: 'W3',
+        id: 'l4-norte',
+        name: 'Travessia Via L4 Norte',
+        shortTag: 'L4',
         danger: 'alta',
-        coords: [-15.7570, -47.8910],
-        radiusMeters: 380,
-        delaySec: 55,
-        note: 'Cruzamento da Av. W3 Norte próximo à 711/712 Norte (fluxo pesado de ônibus).'
-      },
-      {
-        id: 'w4-w5-uniceub',
-        name: 'Trecho W4/W5 & UniCEUB',
-        shortTag: 'PEDESTRES',
-        danger: 'media',
-        coords: [-15.7680, -47.8945],
-        radiusMeters: 550,
-        delaySec: 45,
-        note: 'Redução de velocidade em cruzamentos locais, raízes no asfalto e fluxo de pedestres no UniCEUB.'
+        delaySec: 65,
+        note: 'Cruzamento da Via L4 Norte (fluxo rápido próximo à UnB/Lago). Atenção redobrada.',
+        coords: [
+          [-15.7980, -47.8565],
+          [-15.7860, -47.8615],
+          [-15.7740, -47.8650],
+          [-15.7620, -47.8685],
+          [-15.7480, -47.8730]
+        ]
       }
     ];
 
@@ -1474,34 +1394,6 @@
         coords: OFFICIAL_LEAFLET_COORDS
       },
       {
-        id: 'rota-ciclomapa-op1',
-        shortTitle: 'Opção 1 • Eixo N1 + SHN + W4/W5',
-        tag: 'Via N1 Direta',
-        distanceKm: 7.9,
-        description: 'Segue pela Ciclovia do Eixo Monumental (N1) passando pela Rodoviária / Setor Hoteleiro Norte até entrar na Ciclovia W4/W5 Norte rumo à 711 Norte.',
-        // Shares exact Via N1 start + real curved SHN + exact W4/W5 corridor from Official Route
-        coords: [
-          ...OFFICIAL_LEAFLET_COORDS.slice(0, 6),
-          [-15.79375, -47.87845],
-          [-15.79245, -47.88240],
-          [-15.79055, -47.88425],
-          [-15.78855, -47.88615],
-          [-15.78675, -47.88875],
-          [-15.78485, -47.89045],
-          ...OFFICIAL_LEAFLET_COORDS.slice(138)
-        ],
-        glueAnchors: [
-          [-15.799000, -47.862554],
-          [-15.794805, -47.875209],
-          [-15.792450, -47.882400],
-          [-15.788550, -47.886150],
-          [-15.783286, -47.889995],
-          [-15.774540, -47.891338],
-          [-15.764378, -47.894003],
-          [-15.756483, -47.895700]
-        ]
-      },
-      {
         id: 'rota-sqn',
         shortTitle: 'Eixo Interno SQN 102–112',
         tag: 'Arborizada SQN',
@@ -1515,7 +1407,7 @@
           [-15.76850, -47.88675],
           [-15.76250, -47.88850],
           [-15.75705, -47.89025],
-          [-15.75690, -47.89335],
+          [-15.75690, -47.89460],
           [-15.756483, -47.895700]
         ],
         glueAnchors: [
@@ -1526,36 +1418,6 @@
           [-15.774500, -47.885350],
           [-15.762500, -47.888500],
           [-15.757050, -47.890250],
-          [-15.756483, -47.895700]
-        ]
-      },
-      {
-        id: 'rota-l2',
-        shortTitle: 'Corredor L2/L3 + Transv. 112N',
-        tag: 'Asfalto Liso L2',
-        distanceKm: 8.5,
-        description: 'Sobe toda a ciclovia contínua da L2 Norte (402N–412N) acompanhando a curvatura real da Asa Norte e cruza o Eixão pela passagem 110/112N até a 711N.',
-        // Shares exact official N1 -> L2 entrance, then follows real curved L2 Norte corridor
-        coords: [
-          ...OFFICIAL_LEAFLET_COORDS.slice(0, 40),
-          [-15.78050, -47.87395],
-          [-15.77450, -47.87495],
-          [-15.76850, -47.87635],
-          [-15.76250, -47.87815],
-          [-15.75685, -47.87990],
-          [-15.75685, -47.88480],
-          [-15.75690, -47.88990],
-          [-15.75685, -47.89350],
-          [-15.756483, -47.895700]
-        ],
-        glueAnchors: [
-          [-15.799000, -47.862554],
-          [-15.794805, -47.875209],
-          [-15.786162, -47.873485],
-          [-15.774500, -47.874950],
-          [-15.762500, -47.878150],
-          [-15.756850, -47.879900],
-          [-15.756850, -47.889900],
           [-15.756483, -47.895700]
         ]
       }
@@ -1637,7 +1499,10 @@
         demoProgressMeters: 0,
         reversed: false, // false = Ida (Câmara -> 711N), true = Volta (711N -> Câmara)
         followGps: true,
-        headingUp: true, // Waze-style direction-up rotation
+        headingUp: true, // Auto-follow phone compass / travel direction
+        compassMode: true, // Rotates map automatically with phone compass or GPS heading
+        mapBearing: 0, // Current map rotation angle in degrees clockwise (0 = North up)
+        deviceCompassHeading: null, // Live smartphone compass heading (0..360 deg)
         voiceEnabled: false, // OFF by default per user preference
         lightTheme: false,
         currentPos: null,
@@ -1777,35 +1642,75 @@
 
     function getActiveRouteObject() {
       const all = getAllRoutes();
-      const base = all.find(r => r.id === state.selectedRouteId) || all[0];
-      const dest = DESTINATIONS[state.destinationKey] || DESTINATIONS['711n'];
-
-      if (state.destinationKey === '912n' && !base.isCustom && !base.isPlanned) {
-        const extendedCoords = [...base.coords, dest.coords];
-        return {
-          ...base,
-          coords: extendedCoords,
-          distanceKm: +(base.distanceKm + dest.extraKm).toFixed(2)
-        };
-      }
-      return base;
+      return all.find(r => r.id === state.selectedRouteId) || all[0];
     }
 
+    // Exact 2D line-segment intersection (returns [lat, lng] if segments AB and CD intersect, else null)
+    function computeSegmentIntersection(a, b, c, d) {
+      const rLat = b[0] - a[0];
+      const rLng = b[1] - a[1];
+      const sLat = d[0] - c[0];
+      const sLng = d[1] - c[1];
+      const denom = rLat * sLng - rLng * sLat;
+      if (Math.abs(denom) < 1e-12) return null;
+
+      const qpLat = c[0] - a[0];
+      const qpLng = c[1] - a[1];
+      const t = (qpLat * sLng - qpLng * sLat) / denom;
+      const u = (qpLat * rLng - qpLng * rLat) / denom;
+
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        return [+(a[0] + t * rLat).toFixed(6), +(a[1] + t * rLng).toFixed(6)];
+      }
+      return null;
+    }
+
+    // Smartly detects ONLY exact perpendicular/transverse crossings where the route cuts across a main via
     function detectRouteSlowdowns(coords) {
       if (!Array.isArray(coords) || coords.length < 2) return [];
-      const detected = [];
-      for (const crossing of ARTERIAL_CROSSINGS) {
-        let minDist = Infinity;
-        for (let i = 0; i < coords.length; i++) {
-          const d = haversineMeters(coords[i][0], coords[i][1], crossing.coords[0], crossing.coords[1]);
-          if (d < minDist) minDist = d;
-          if (minDist <= crossing.radiusMeters) break;
-        }
-        if (minDist <= crossing.radiusMeters) {
-          detected.push(crossing);
+      const crossings = [];
+
+      for (const via of MAJOR_ARTERIAL_VIAS) {
+        const viaCoords = via.coords;
+        for (let i = 0; i < coords.length - 1; i++) {
+          const rA = coords[i];
+          const rB = coords[i + 1];
+          const rBearing = computeBearingDeg(rA[0], rA[1], rB[0], rB[1]);
+
+          for (let j = 0; j < viaCoords.length - 1; j++) {
+            const vA = viaCoords[j];
+            const vB = viaCoords[j + 1];
+            const hit = computeSegmentIntersection(rA, rB, vA, vB);
+            if (!hit) continue;
+
+            // Check crossing angle: must cut perpendicularly/transversely (>= 38°), never parallel
+            const vBearing = computeBearingDeg(vA[0], vA[1], vB[0], vB[1]);
+            const rawDiff = Math.abs(normalizeAngleDiff(rBearing - vBearing));
+            const crossingAngle = rawDiff > 90 ? 180 - rawDiff : rawDiff;
+            if (crossingAngle < 38) continue;
+
+            // Deduplicate if the same arterial is crossed multiple times within 180m (e.g. slight crosswalk zigzag)
+            const duplicate = crossings.find(
+              c => c.viaId === via.id && haversineMeters(c.coords[0], c.coords[1], hit[0], hit[1]) < 180
+            );
+            if (duplicate) continue;
+
+            crossings.push({
+              id: `${via.id}-${crossings.length}`,
+              viaId: via.id,
+              name: via.name,
+              shortTag: via.shortTag,
+              danger: via.danger,
+              delaySec: via.delaySec,
+              note: via.note,
+              coords: hit,
+              angleDeg: Math.round(crossingAngle)
+            });
+          }
         }
       }
-      return detected;
+
+      return crossings;
     }
 
     // Calibrated so JET 20 km/h on the 7.75 km official route equals 28 min (24.3m moving + 3.7m crossings)
@@ -2733,9 +2638,9 @@
 
       let segText = 'Em deslocamento pela malha cicloviária';
       if (progress <= 0.03) segText = 'Saída: Praça dos Três Poderes / Câmara';
-      else if (progress >= 0.97) segText = `Chegada: ${DESTINATIONS[state.destinationKey].label}`;
+      else if (progress >= 0.97) segText = `Chegada: ${route.destLabel || DESTINATIONS['711n'].label}`;
       else {
-        const nearCrossing = ARTERIAL_CROSSINGS.find(c => haversineMeters(pos[0], pos[1], c.coords[0], c.coords[1]) < 260);
+        const nearCrossing = m.slowdowns.find(c => haversineMeters(pos[0], pos[1], c.coords[0], c.coords[1]) < 200);
         if (nearCrossing) segText = `Desaceleração: ${nearCrossing.name} (+${nearCrossing.delaySec}s)`;
       }
       document.getElementById('segmentStatusBadge').textContent = `${segText} (${currentKm} km)`;
@@ -2871,7 +2776,7 @@
     }
 
     // Create unmistakable warning triangle icons for dangerous Brasília arterial crossings
-    function createDangerCrossingIcon(pt, compact = false) {
+    function createDangerCrossingIcon(pt, compact = false, keepUpright = false) {
       const isHigh = pt.danger !== 'media';
       const fillHex = isHigh ? '#ef4444' : '#f59e0b';
       const strokeHex = isHigh ? '#fecaca' : '#fef3c7';
@@ -2884,7 +2789,7 @@
       return L.divIcon({
         className: 'danger-crossing-marker',
         html: `
-          <div class="relative flex flex-col items-center">
+          <div class="${keepUpright ? 'nav-upright-marker ' : ''}relative flex flex-col items-center">
             <div class="relative flex items-center justify-center" style="width:${sz}px;height:${sz}px;">
               <span class="danger-crossing-pulse absolute inset-0 rounded-full ${haloClass}"></span>
               <svg viewBox="0 0 36 34" class="relative h-full w-full drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)]">
@@ -2902,28 +2807,31 @@
     }
 
     function renderStaticOverlays() {
-      // High-visibility Dangerous Arterial Crossings (L2, Eixão, W3, Pedestres)
+      if (!slowdownLayerGroup) return;
       slowdownLayerGroup.clearLayers();
-      ARTERIAL_CROSSINGS.forEach(pt => {
-        const isHigh = pt.danger !== 'media';
 
-        // Translucent red/amber hazard zone circle directly on the street crossing
+      const route = getActiveRouteObject();
+      if (!route || !Array.isArray(route.coords)) return;
+
+      // Smartly render danger markers ONLY at exact perpendicular arterial crossings of the active route
+      const activeCrossings = detectRouteSlowdowns(route.coords);
+      activeCrossings.forEach(pt => {
         L.circle(pt.coords, {
-          radius: isHigh ? 38 : 30,
-          color: isHigh ? '#f43f5e' : '#f59e0b',
-          fillColor: isHigh ? '#ef4444' : '#f59e0b',
-          fillOpacity: isHigh ? 0.22 : 0.16,
-          weight: 1.5,
+          radius: 32,
+          color: '#f43f5e',
+          fillColor: '#ef4444',
+          fillOpacity: 0.24,
+          weight: 1.6,
           dashArray: '4, 4',
           interactive: false
         }).addTo(slowdownLayerGroup);
 
-        const icon = createDangerCrossingIcon(pt, false);
+        const icon = createDangerCrossingIcon(pt, false, false);
         L.marker(pt.coords, { icon, zIndexOffset: 650 })
           .bindPopup(`
             <div class="p-1 max-w-[240px]">
-              <div class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${isHigh ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">
-                ⚠️ ${isHigh ? 'Travessia Perigosa' : 'Zona de Atenção'} (+${pt.delaySec}s)
+              <div class="inline-flex items-center gap-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-rose-300">
+                ⚠️ Travessia Perpendicular (${pt.angleDeg}°) • +${pt.delaySec}s
               </div>
               <div class="mt-1 text-xs font-extrabold text-white">${pt.name}</div>
               <p class="mt-1 text-[11px] leading-relaxed text-slate-300">${pt.note}</p>
@@ -2939,6 +2847,9 @@
 
       const route = getActiveRouteObject();
       if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
+
+      // Refresh exact perpendicular crossing markers for the active route
+      renderStaticOverlays();
 
       // Subtle glowing outer halo + crisp bright blue main line
       L.polyline(route.coords, {
@@ -4463,7 +4374,8 @@
         if (state.compareIds.length >= 3) state.compareIds.shift();
         state.compareIds.push(vehicleId);
       }
-      document.getElementById('headerCompareCount').textContent = state.compareIds.length;
+      const cc = document.getElementById('headerCompareCount');
+      if (cc) cc.textContent = state.compareIds.length;
       renderCatalog();
       renderComparisonTable();
     }
@@ -4571,11 +4483,13 @@
     }
 
     function getLandmarkHintNear(lat, lng) {
-      const nearCrossing = ARTERIAL_CROSSINGS.find(c => haversineMeters(lat, lng, c.coords[0], c.coords[1]) < 320);
+      const route = getActiveRouteObject();
+      const activeCrossings = route ? detectRouteSlowdowns(route.coords) : [];
+      const nearCrossing = activeCrossings.find(c => haversineMeters(lat, lng, c.coords[0], c.coords[1]) < 220);
       if (nearCrossing) return nearCrossing.name;
       if (lat < -15.7935) return 'Via N1 • Esplanada';
-      if (lng > -47.8780) return 'Ciclovia L2 Norte';
-      if (lng < -47.8902) return 'Ciclovia W4/W5 Norte';
+      if (lng > -47.8765) return 'Ciclovia L2 Norte';
+      if (lng < -47.8895) return 'Ciclovia W4/W5 Norte';
       if (lat > -15.7595) return 'Trecho 112 / 711 Norte';
       return 'Malha Cicloviária Asa Norte';
     }
@@ -4753,10 +4667,296 @@
       const viewport = document.getElementById('navMapViewport');
       const rotator = document.getElementById('navMapRotator');
       if (!viewport || !rotator) return;
-      const diag = Math.ceil(Math.hypot(viewport.clientWidth || 400, viewport.clientHeight || 750)) + 48;
+      const w = viewport.clientWidth || window.innerWidth || 400;
+      const h = viewport.clientHeight || window.innerHeight || 750;
+      const diag = Math.ceil(Math.hypot(w, h)) + 96;
       rotator.style.width = `${diag}px`;
       rotator.style.height = `${diag}px`;
-      if (navMap) navMap.invalidateSize();
+      rotator.style.marginLeft = `${-diag / 2}px`;
+      rotator.style.marginTop = `${-diag / 2}px`;
+      if (navMap) navMap.invalidateSize({ animate: false });
+    }
+
+    // Smooth shortest-arc angular interpolation
+    function blendAngleDeg(currentDeg, targetDeg, alpha = 0.25) {
+      const diff = normalizeAngleDiff(targetDeg - currentDeg);
+      return (currentDeg + diff * alpha + 360) % 360;
+    }
+
+    // Rotate the navigation map stage to any bearing (0 = North up) while keeping marker badges upright
+    function setNavMapBearing(bearingDeg, smooth = false) {
+      const normalized = ((bearingDeg % 360) + 360) % 360;
+      state.nav.mapBearing = smooth
+        ? blendAngleDeg(state.nav.mapBearing, normalized, 0.28)
+        : normalized;
+
+      const rotator = document.getElementById('navMapRotator');
+      if (rotator) {
+        rotator.style.transform = `rotate(${-state.nav.mapBearing.toFixed(2)}deg)`;
+        rotator.style.setProperty('--nav-counter-rot', `${state.nav.mapBearing.toFixed(2)}deg`);
+      }
+
+      // Rotate HUD compass needle to always point toward true North
+      const needle = document.getElementById('navCompassNeedleSvg');
+      if (needle) {
+        needle.style.transform = `rotate(${-state.nav.mapBearing.toFixed(1)}deg)`;
+      }
+
+      // Keep GPS directional puck aligned with user heading relative to current map rotation
+      updateNavPuckArrow();
+    }
+
+    function updateNavPuckArrow() {
+      const arrowEl = document.getElementById('navGpsArrowInner');
+      if (!arrowEl) return;
+      const pointerHeading = (state.nav.currentSpeedKmh < 5 && state.nav.deviceCompassHeading !== null)
+        ? state.nav.deviceCompassHeading
+        : state.nav.currentHeading;
+      // Inside rotated #navMapRotator, the puck is already rotated by -mapBearing, so rotating it by +pointerHeading
+      // points it straight UP whenever mapBearing === pointerHeading (like Google Maps / Waze)!
+      arrowEl.style.transform = `rotate(${pointerHeading.toFixed(1)}deg)`;
+    }
+
+    function updateCompassBtnVisual() {
+      const btn = document.getElementById('btnNavCompassMode');
+      const tag = document.getElementById('navCompassModeTag');
+      if (!btn || !tag) return;
+
+      if (state.nav.compassMode) {
+        btn.className = 'flex h-12 w-12 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95';
+        tag.textContent = 'AUTO';
+        tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-emerald-300';
+      } else {
+        btn.className = 'flex h-12 w-12 flex-col items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-white shadow-xl backdrop-blur-md transition active:scale-95';
+        tag.textContent = Math.abs(normalizeAngleDiff(state.nav.mapBearing)) < 3 ? 'NORTE' : 'LIVRE';
+        tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-slate-300';
+      }
+    }
+
+    // Smartphone Compass Listener (follows where the Android phone is pointing like Google Maps / Waze)
+    let compassListenersAttached = false;
+    function startPhoneCompassTracking() {
+      if (compassListenersAttached) return;
+      compassListenersAttached = true;
+
+      const handleOrientation = (ev) => {
+        let heading = null;
+        if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) {
+          heading = ev.webkitCompassHeading;
+        } else if (typeof ev.alpha === 'number' && !isNaN(ev.alpha)) {
+          const screenAngle = (window.screen?.orientation?.angle || window.orientation || 0);
+          heading = (360 - ev.alpha + screenAngle) % 360;
+        }
+        if (heading === null) return;
+
+        state.nav.deviceCompassHeading = state.nav.deviceCompassHeading === null
+          ? heading
+          : blendAngleDeg(state.nav.deviceCompassHeading, heading, 0.22);
+
+        if (state.activeTab === 'navigation') {
+          updateNavPuckArrow();
+          // Rotate map to follow phone pointing direction when compassMode is active & moving slowly/standing still
+          if (state.nav.compassMode && state.nav.currentSpeedKmh < 6 && !state.nav.isDemoMode) {
+            setNavMapBearing(state.nav.deviceCompassHeading, true);
+          }
+        }
+      };
+
+      // iOS 13+ permission gate (no-op on Android Chrome which grants directly)
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(res => {
+          if (res === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation, true);
+          }
+        }).catch(() => {});
+      } else {
+        window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+        window.addEventListener('deviceorientation', (ev) => {
+          if (ev.absolute === false && state.nav.deviceCompassHeading !== null) return;
+          handleOrientation(ev);
+        }, true);
+      }
+    }
+
+    // Unified Google Maps-style Gesture Controller:
+    // - 1-finger drag pans accurately in screen space at ANY rotation angle
+    // - 2-finger pinch simultaneously zooms (smooth fractional zoom) AND freely rotates the map view
+    // - Desktop wheel zooms & Shift+Drag / Right-Click drag freely rotates
+    let navGesturesAttached = false;
+    function setupNavRotationAndTouchGestures() {
+      if (navGesturesAttached) return;
+      const viewport = document.getElementById('navMapViewport');
+      if (!viewport) return;
+      navGesturesAttached = true;
+
+      const isHudTarget = (target) => {
+        return Boolean(target && target.closest && target.closest('button, select, input, a, #navManeuverCard, #navOffRouteBanner, #navCrossingPill'));
+      };
+
+      // Convert screen-space drag (dx_s, dy_s) into Leaflet unrotated map-space panBy delta
+      const panInScreenSpace = (dxScreen, dyScreen) => {
+        if (!navMap) return;
+        const rad = (state.nav.mapBearing * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const dxMap = dxScreen * cos - dyScreen * sin;
+        const dyMap = dxScreen * sin + dyScreen * cos;
+        navMap.panBy([-dxMap, -dyMap], { animate: false });
+      };
+
+      // Touch State
+      let touchMode = null; // 'pan' | 'pinch'
+      let lastX = 0;
+      let lastY = 0;
+      let pinchStartDist = 0;
+      let pinchStartAngle = 0;
+      let pinchStartZoom = 16;
+      let pinchStartBearing = 0;
+      let lastMidX = 0;
+      let lastMidY = 0;
+
+      viewport.addEventListener('touchstart', (e) => {
+        if (!navMap || isHudTarget(e.target)) return;
+
+        if (e.touches.length === 1) {
+          touchMode = 'pan';
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          e.preventDefault();
+          touchMode = 'pinch';
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          pinchStartDist = Math.max(10, Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY));
+          pinchStartAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+          pinchStartZoom = navMap.getZoom();
+          pinchStartBearing = state.nav.mapBearing;
+          lastMidX = (t1.clientX + t2.clientX) / 2;
+          lastMidY = (t1.clientY + t2.clientY) / 2;
+        }
+      }, { passive: false });
+
+      viewport.addEventListener('touchmove', (e) => {
+        if (!navMap || !touchMode) return;
+
+        if (touchMode === 'pan' && e.touches.length === 1) {
+          e.preventDefault();
+          const x = e.touches[0].clientX;
+          const y = e.touches[0].clientY;
+          const dx = x - lastX;
+          const dy = y - lastY;
+          lastX = x;
+          lastY = y;
+
+          if (Math.hypot(dx, dy) > 1) {
+            if (state.nav.followGps) {
+              state.nav.followGps = false;
+              updateRecenterBtnVisual();
+            }
+            panInScreenSpace(dx, dy);
+          }
+        } else if (e.touches.length === 2) {
+          e.preventDefault();
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          if (touchMode !== 'pinch') {
+            touchMode = 'pinch';
+            pinchStartDist = Math.max(10, Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY));
+            pinchStartAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+            pinchStartZoom = navMap.getZoom();
+            pinchStartBearing = state.nav.mapBearing;
+            lastMidX = (t1.clientX + t2.clientX) / 2;
+            lastMidY = (t1.clientY + t2.clientY) / 2;
+            return;
+          }
+
+          const curDist = Math.max(10, Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY));
+          const curAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+          const midX = (t1.clientX + t2.clientX) / 2;
+          const midY = (t1.clientY + t2.clientY) / 2;
+
+          // Pan smoothly with two-finger midpoint
+          panInScreenSpace(midX - lastMidX, midY - lastMidY);
+          lastMidX = midX;
+          lastMidY = midY;
+
+          // Simultaneous free two-finger rotation
+          const deltaAngleDeg = ((curAngle - pinchStartAngle) * 180) / Math.PI;
+          if (Math.abs(deltaAngleDeg) > 4) {
+            state.nav.compassMode = false;
+            updateCompassBtnVisual();
+          }
+          setNavMapBearing(pinchStartBearing - deltaAngleDeg, false);
+
+          // Simultaneous smooth pinch-to-zoom
+          const zoomDelta = Math.log2(curDist / pinchStartDist);
+          const nextZoom = Math.max(11, Math.min(19.5, pinchStartZoom + zoomDelta));
+          navMap.setZoom(nextZoom, { animate: false });
+
+          if (state.nav.followGps) {
+            state.nav.followGps = false;
+            updateRecenterBtnVisual();
+          }
+        }
+      }, { passive: false });
+
+      viewport.addEventListener('touchend', (e) => {
+        if (e.touches.length === 1) {
+          touchMode = 'pan';
+          lastX = e.touches[0].clientX;
+          lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 0) {
+          touchMode = null;
+        }
+      });
+
+      // Desktop Mouse Support: Left-drag = screen-space pan; Right-drag or Shift+Left-drag = free rotation; Wheel = zoom
+      let mouseMode = null; // 'pan' | 'rotate'
+      let mLastX = 0;
+      let mLastY = 0;
+
+      viewport.addEventListener('contextmenu', (e) => {
+        if (!isHudTarget(e.target)) e.preventDefault();
+      });
+
+      viewport.addEventListener('mousedown', (e) => {
+        if (!navMap || isHudTarget(e.target)) return;
+        mouseMode = (e.button === 2 || e.shiftKey) ? 'rotate' : 'pan';
+        mLastX = e.clientX;
+        mLastY = e.clientY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!mouseMode || !navMap) return;
+        const dx = e.clientX - mLastX;
+        const dy = e.clientY - mLastY;
+        mLastX = e.clientX;
+        mLastY = e.clientY;
+
+        if (mouseMode === 'rotate') {
+          state.nav.compassMode = false;
+          updateCompassBtnVisual();
+          setNavMapBearing(state.nav.mapBearing - dx * 0.55, false);
+        } else if (Math.hypot(dx, dy) > 0.5) {
+          if (state.nav.followGps) {
+            state.nav.followGps = false;
+            updateRecenterBtnVisual();
+          }
+          panInScreenSpace(dx, dy);
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        mouseMode = null;
+      });
+
+      viewport.addEventListener('wheel', (e) => {
+        if (!navMap || isHudTarget(e.target)) return;
+        e.preventDefault();
+        const deltaZ = e.deltaY < 0 ? 0.5 : -0.5;
+        const nextZoom = Math.max(11, Math.min(19.5, navMap.getZoom() + deltaZ));
+        navMap.setZoom(nextZoom, { animate: false });
+      }, { passive: false });
     }
 
     function applyNavBasemapTheme() {
@@ -4781,47 +4981,46 @@
       if (themeBtn) themeBtn.textContent = state.nav.lightTheme ? '🌙' : '☀️';
     }
 
-    // Rotate only the blue directional GPS chevron (keeping native Leaflet touch pan/pinch 100% accurate)
     function updateNavMapRotation(headingDeg) {
-      const arrowEl = document.getElementById('navGpsArrowInner');
-      if (arrowEl) {
-        arrowEl.style.transform = `rotate(${headingDeg.toFixed(1)}deg)`;
+      if (state.nav.compassMode) {
+        setNavMapBearing(headingDeg, true);
+      } else {
+        updateNavPuckArrow();
       }
     }
 
     function initNavMap() {
+      sizeNavRotatorContainer();
+
       if (navMap) {
         navMap.invalidateSize();
         refreshNavigationRouteLayer();
         return;
       }
 
-      // Organic Maps-inspired crisp Canvas rendering & responsive native mobile touch gestures
+      // Custom gesture engine handles rotated screen-space panning & smooth simultaneous pinch-zoom + free rotation
       navMap = L.map('navMap', {
         center: OFFICIAL_LEAFLET_COORDS[0],
         zoom: 16,
+        zoomSnap: 0,
+        zoomDelta: 0.5,
         zoomControl: false,
         attributionControl: false,
         preferCanvas: true,
         tap: false,
-        touchZoom: true,
-        dragging: true,
+        touchZoom: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
         bounceAtZoomLimits: false
       });
 
+      setupNavRotationAndTouchGestures();
       applyNavBasemapTheme();
 
       navCiclomapaGroup = L.layerGroup().addTo(navMap);
       navRouteGroup = L.layerGroup().addTo(navMap);
       navCrossingsGroup = L.layerGroup().addTo(navMap);
-
-      // Pause auto-follow when user pans or pinches manually
-      navMap.on('dragstart zoomstart', () => {
-        if (state.nav.isTracking || state.nav.isDemoMode) {
-          state.nav.followGps = false;
-          updateRecenterBtnVisual();
-        }
-      });
 
       // Render loaded CicloMapa network (or Asa Norte base)
       syncNavCiclomapaOverlay();
@@ -4832,7 +5031,7 @@
         html: `
           <div class="relative flex h-11 w-11 items-center justify-center">
             <div class="gps-puck-pulse absolute inset-0 rounded-full bg-sky-400/50"></div>
-            <div id="navGpsArrowInner" class="relative flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-white bg-sky-500 shadow-2xl transition-transform duration-200">
+            <div id="navGpsArrowInner" class="relative flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-white bg-sky-500 shadow-2xl transition-transform duration-150">
               <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
               </svg>
@@ -4862,6 +5061,7 @@
         interactive: false
       }).addTo(navMap);
 
+      updateCompassBtnVisual();
       refreshNavigationRouteLayer();
     }
 
@@ -4912,38 +5112,29 @@
       // Start & Finish flags
       const endIcon = L.divIcon({
         className: 'nav-dest-flag',
-        html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2.5 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">🏁 ${state.nav.reversed ? 'Câmara / Três Poderes' : DESTINATIONS[state.destinationKey].label}</div>`,
+        html: `<div class="nav-upright-marker rounded-full border-2 border-white bg-purple-600 px-2.5 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">🏁 ${state.nav.reversed ? 'Câmara / Três Poderes' : (getActiveRouteObject().destLabel || DESTINATIONS['711n'].label)}</div>`,
         iconSize: [120, 22],
         iconAnchor: [60, 24]
       });
       L.marker(coords[coords.length - 1], { icon: endIcon, interactive: false }).addTo(navRouteGroup);
 
-      // Show high-visibility Dangerous Travessia warning triangles ONLY along the active navigation route
+      // Smartly render danger warning triangles ONLY at exact perpendicular arterial crossings of the active route
       if (navCrossingsGroup) {
         navCrossingsGroup.clearLayers();
-        ARTERIAL_CROSSINGS.forEach(pt => {
-          let nearRoute = false;
-          for (let i = 0; i < coords.length; i += 2) {
-            if (haversineMeters(coords[i][0], coords[i][1], pt.coords[0], pt.coords[1]) <= 220) {
-              nearRoute = true;
-              break;
-            }
-          }
-          if (!nearRoute) return;
-
-          const isHigh = pt.danger !== 'media';
+        const exactCrossings = detectRouteSlowdowns(coords);
+        exactCrossings.forEach(pt => {
           L.circle(pt.coords, {
-            radius: isHigh ? 36 : 26,
-            color: isHigh ? '#f43f5e' : '#f59e0b',
-            fillColor: isHigh ? '#ef4444' : '#f59e0b',
-            fillOpacity: isHigh ? 0.25 : 0.16,
+            radius: 32,
+            color: '#f43f5e',
+            fillColor: '#ef4444',
+            fillOpacity: 0.25,
             weight: 1.8,
             dashArray: '4, 4',
             interactive: false
           }).addTo(navCrossingsGroup);
 
           L.marker(pt.coords, {
-            icon: createDangerCrossingIcon(pt, true),
+            icon: createDangerCrossingIcon(pt, true, true),
             interactive: false,
             zIndexOffset: 900
           }).addTo(navCrossingsGroup);
@@ -4952,11 +5143,12 @@
 
       const dirLabel = document.getElementById('navDirectionLabel');
       if (dirLabel) {
-        dirLabel.textContent = state.nav.reversed ? 'Volta (Câmara)' : `Ida (${DESTINATIONS[state.destinationKey].label.split(' ').slice(-2).join(' ')})`;
+        dirLabel.textContent = state.nav.reversed ? 'Volta (Câmara)' : 'Ida (711 Norte)';
       }
 
       if (!state.nav.isTracking && !state.nav.isDemoMode) {
-        navMap.fitBounds(L.latLngBounds(coords), { padding: [70, 90] });
+        setNavMapBearing(0, false);
+        navMap.fitBounds(L.latLngBounds(coords), { padding: [110, 120] });
         updateNavIdleMetrics();
       }
     }
@@ -5009,13 +5201,18 @@
       const totalMeters = Math.max(1, cum[cum.length - 1]);
       const proj = projectGpsOntoRoute(lat, lng, coords, cum);
 
-      // Compute speed (km/h) & smooth heading
+      // Compute speed (km/h) & smooth heading (uses GPS course while moving, or live phone compass when slow/stopped)
       const speedKmh = typeof speedMs === 'number' && !isNaN(speedMs) && speedMs >= 0
         ? Math.round(speedMs * 3.6)
         : 0;
-      const effectiveHeading = typeof headingDeg === 'number' && !isNaN(headingDeg) && speedKmh >= 3
-        ? headingDeg
-        : proj.segBearing;
+      let effectiveHeading;
+      if (typeof headingDeg === 'number' && !isNaN(headingDeg) && speedKmh >= 6) {
+        effectiveHeading = headingDeg;
+      } else if (state.nav.deviceCompassHeading !== null && !state.nav.isDemoMode) {
+        effectiveHeading = state.nav.deviceCompassHeading;
+      } else {
+        effectiveHeading = proj.segBearing;
+      }
 
       state.nav.currentPos = [lat, lng];
       state.nav.currentSpeedKmh = speedKmh;
@@ -5106,27 +5303,29 @@
         // Voice prompts at 140m and 35m before each turn
         const speakKeyFar = `${nextM.idx}-far`;
         const speakKeyNear = `${nextM.idx}-near`;
-        if (distToM <= 145 && distToM > 60 && state.nav.lastSpokenKey !== speakKeyFar && state.nav.lastSpokenKey !== speakKeyNear) {
+        if (distToM <= 140 && distToM > 50 && state.nav.lastSpokenKey !== speakKeyFar && state.nav.lastSpokenKey !== speakKeyNear) {
           state.nav.lastSpokenKey = speakKeyFar;
-          speakNavInstruction(`Em ${formatDistPtBR(distToM)}, ${nextM.text}.`);
+          playSoftNavBeep(660, 100);
+          speakNavInstruction(`Em ${formatDistPtBR(distToM)}, ${nextM.text}`);
         } else if (distToM <= 35 && state.nav.lastSpokenKey !== speakKeyNear) {
           state.nav.lastSpokenKey = speakKeyNear;
-          playSoftNavBeep(880, 110);
+          playSoftNavBeep(880, 130);
           speakNavInstruction(nextM.text);
         }
       }
 
-      // Upcoming Dangerous Arterial Crossing Caution Alert (within 220m ahead)
+      // Upcoming Dangerous Perpendicular Arterial Crossing Alert (within 220m ahead along route)
       const crossingPill = document.getElementById('navCrossingPill');
       if (crossingPill) {
         let upcomingCrossing = null;
         let upcomingDist = Infinity;
+        const routeCrossings = detectRouteSlowdowns(coords);
 
-        for (const c of ARTERIAL_CROSSINGS) {
+        for (const c of routeCrossings) {
           const distDirect = haversineMeters(lat, lng, c.coords[0], c.coords[1]);
           if (distDirect <= 220) {
             const cProj = projectGpsOntoRoute(c.coords[0], c.coords[1], coords, cum);
-            if (cProj.offRouteMeters <= 220 && cProj.alongMeters >= proj.alongMeters - 25 && distDirect < upcomingDist) {
+            if (cProj.alongMeters >= proj.alongMeters - 20 && distDirect < upcomingDist) {
               upcomingDist = distDirect;
               upcomingCrossing = c;
             }
@@ -5145,11 +5344,20 @@
         }
       }
 
-      // Update directional chevron & center map if following GPS
+      // Rotate map to follow phone/travel direction (Heading-Up) & center with forward lookahead
       updateNavMapRotation(effectiveHeading);
       if (state.nav.followGps) {
-        const targetZoom = Math.max(navMap.getZoom(), 16);
-        navMap.setView(displayLatLng, targetZoom, { animate: true, duration: 0.35 });
+        const targetZoom = Math.max(navMap.getZoom(), 16.5);
+        // Subtle forward lookahead offset along current heading so you see more route ahead on vertical screen
+        let centerLatLng = displayLatLng;
+        if (state.nav.compassMode) {
+          const rad = (state.nav.mapBearing * Math.PI) / 180;
+          const lookAheadMeters = 55;
+          const dLat = (lookAheadMeters * Math.cos(rad)) / 111320;
+          const dLng = (lookAheadMeters * Math.sin(rad)) / (111320 * Math.cos((displayLatLng[0] * Math.PI) / 180));
+          centerLatLng = [displayLatLng[0] + dLat, displayLatLng[1] + dLng];
+        }
+        navMap.setView(centerLatLng, targetZoom, { animate: true, duration: 0.35 });
       }
     }
 
@@ -5235,8 +5443,11 @@
       if (!navMap) initNavMap();
       state.nav.isTracking = true;
       state.nav.followGps = true;
+      state.nav.compassMode = true;
       state.nav.lastSpokenKey = '';
+      startPhoneCompassTracking();
       updateRecenterBtnVisual();
+      updateCompassBtnVisual();
       updateNavStartStopVisual();
       requestWakeLock();
 
@@ -5294,12 +5505,14 @@
 
       state.nav.isDemoMode = true;
       state.nav.followGps = true;
+      state.nav.compassMode = true;
       state.nav.demoProgressMeters = 0;
       state.nav.lastSpokenKey = '';
 
       const demoLbl = document.getElementById('navDemoBtnLabel');
       if (demoLbl) demoLbl.textContent = 'Parar';
       updateRecenterBtnVisual();
+      updateCompassBtnVisual();
       updateNavStartStopVisual();
 
       const simSpeedKmh = Math.max(18, state.cruiseVelocity);
@@ -5342,6 +5555,7 @@
         btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
 
         setTimeout(() => {
+          sizeNavRotatorContainer();
           initNavMap();
           if (navMap) navMap.invalidateSize();
           refreshNavigationRouteLayer();
@@ -5405,19 +5619,7 @@
       document.getElementById('tabBtnNavigation').addEventListener('click', () => switchMainTab('navigation'));
       document.getElementById('tabBtnSimulator').addEventListener('click', () => switchMainTab('simulator'));
 
-      // File Inputs & Drive Sync Modal
-      document.getElementById('btnOpenGeojsonPicker').addEventListener('click', () => {
-        document.getElementById('geojsonFileInput').click();
-      });
-      document.getElementById('btnModalLocalUpload').addEventListener('click', () => {
-        document.getElementById('geojsonFileInput').click();
-      });
-      document.getElementById('geojsonFileInput').addEventListener('change', (e) => {
-        const file = e.target.files?.[0];
-        if (file) processLocalGeojsonFile(file);
-        e.target.value = '';
-      });
-
+      // Custom Route Preset Import / Export
       document.getElementById('btnImportRoutePreset').addEventListener('click', () => {
         document.getElementById('routePresetInput').click();
       });
@@ -5427,21 +5629,6 @@
         e.target.value = '';
       });
       document.getElementById('btnExportRoutePreset').addEventListener('click', exportActiveRouteAsFile);
-
-      document.getElementById('btnOpenDriveModal').addEventListener('click', openDriveModal);
-      document.getElementById('btnCloseDriveModal').addEventListener('click', closeDriveModal);
-      document.getElementById('driveModal').addEventListener('click', (e) => {
-        if (e.target.id === 'driveModal') closeDriveModal();
-      });
-      document.getElementById('btnTriggerDriveSync').addEventListener('click', () => {
-        fetchGeojsonFromUrl(document.getElementById('driveUrlInput').value);
-      });
-      document.getElementById('btnClearGeojsonCache').addEventListener('click', async () => {
-        await clearGeojsonFromIDB();
-        state.loadedCiclomapaGeojson = null;
-        renderDefaultCiclomapaLayer();
-        showToast('Cache Limpo', 'Mapa restaurado para a malha base da Asa Norte.');
-      });
 
       // Smart A -> B Route Planner Listeners
       document.querySelectorAll('.plan-profile-btn').forEach(btn => {
@@ -5553,24 +5740,6 @@
         e.target.checked ? slowdownLayerGroup.addTo(map) : map.removeLayer(slowdownLayerGroup);
       });
 
-      // Destination Switcher (711N vs SGAN 912)
-      document.querySelectorAll('.dest-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          state.destinationKey = btn.dataset.dest;
-          const destObj = DESTINATIONS[state.destinationKey];
-          document.getElementById('headerDestLabel').textContent = destObj.label;
-          document.querySelectorAll('.dest-btn').forEach(b => {
-            b.className = b.dataset.dest === state.destinationKey
-              ? 'dest-btn rounded-md bg-sky-500 px-2 py-0.5 font-bold text-slate-950 transition'
-              : 'dest-btn rounded-md px-2 py-0.5 font-semibold text-slate-400 transition hover:text-white';
-          });
-          resetPlayback();
-          drawSelectedRouteOnMap();
-          recalculateAll();
-          if (navMap) refreshNavigationRouteLayer();
-        });
-      });
-
       // Playback & Route Glue Controls
       document.getElementById('btnPlayPause').addEventListener('click', togglePlayback);
       document.getElementById('btnResetPlayback').addEventListener('click', resetPlayback);
@@ -5629,7 +5798,8 @@
       });
       document.getElementById('btnResetCompare').addEventListener('click', () => {
         state.compareIds = ['foston-s09-pro', 'segway-ninebot-f2-pro', 'honeywhale-s6-s'];
-        document.getElementById('headerCompareCount').textContent = '3';
+        const cc = document.getElementById('headerCompareCount');
+        if (cc) cc.textContent = '3';
         renderCatalog();
         renderComparisonTable();
         showToast('Comparador', 'Restaurado para os 3 modelos em destaque.');
@@ -5641,17 +5811,43 @@
 
       const recenterHandler = () => {
         state.nav.followGps = true;
+        state.nav.compassMode = true;
+        startPhoneCompassTracking();
         updateRecenterBtnVisual();
+        updateCompassBtnVisual();
         if (!navMap) return;
         if (state.nav.currentPos) {
-          navMap.setView(state.nav.currentPos, Math.max(navMap.getZoom(), 16), { animate: true });
+          const targetBearing = (state.nav.currentSpeedKmh < 6 && state.nav.deviceCompassHeading !== null && !state.nav.isDemoMode)
+            ? state.nav.deviceCompassHeading
+            : state.nav.currentHeading;
+          setNavMapBearing(targetBearing, true);
+          navMap.setView(state.nav.currentPos, Math.max(navMap.getZoom(), 16.5), { animate: true });
         } else {
           const coords = getNavigationRouteCoords();
-          if (coords.length >= 2) navMap.fitBounds(L.latLngBounds(coords), { padding: [70, 90] });
+          if (coords.length >= 2) {
+            setNavMapBearing(0, false);
+            navMap.fitBounds(L.latLngBounds(coords), { padding: [110, 120] });
+          }
         }
       };
       document.getElementById('btnNavRecenter').addEventListener('click', recenterHandler);
       document.getElementById('btnNavRecenterAlert').addEventListener('click', recenterHandler);
+
+      document.getElementById('btnNavCompassMode').addEventListener('click', () => {
+        state.nav.compassMode = !state.nav.compassMode;
+        if (state.nav.compassMode) {
+          startPhoneCompassTracking();
+          const targetBearing = (state.nav.deviceCompassHeading !== null && state.nav.currentSpeedKmh < 6 && !state.nav.isDemoMode)
+            ? state.nav.deviceCompassHeading
+            : state.nav.currentHeading;
+          setNavMapBearing(targetBearing, true);
+          showToast('Bússola Automática (AUTO)', 'O mapa agora gira acompanhando para onde o celular aponta.');
+        } else {
+          setNavMapBearing(0, false);
+          showToast('Norte Fixo', 'Você também pode girar o mapa livremente com 2 dedos (pinça).');
+        }
+        updateCompassBtnVisual();
+      });
 
       document.getElementById('btnNavVoiceToggle').addEventListener('click', () => {
         state.nav.voiceEnabled = !state.nav.voiceEnabled;
@@ -5690,6 +5886,7 @@
       // Handle window resize & Wake Lock re-acquisition on Android tab resume
       window.addEventListener('resize', () => {
         if (map) map.invalidateSize();
+        sizeNavRotatorContainer();
         if (navMap) navMap.invalidateSize();
       });
 
