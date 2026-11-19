@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mobilidade Elétrica DF — Simulador & Planejador (Brasília)</title>
+  <title>CicloviasDF — Navegação GPS & Simulador Cicloviário (Brasília)</title>
 
   <!-- Google Fonts: Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -229,22 +229,37 @@
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
 
-  <!-- Hidden File Input for Custom Route Presets -->
-  <input type="file" id="routePresetInput" accept=".geojson,.json" class="hidden" />
+  <!-- Hidden File Input for Custom Route Presets (Komoot GPX & GeoJSON) -->
+  <input type="file" id="routePresetInput" accept=".gpx,.geojson,.json" class="hidden" />
 
   <!-- Top Sticky Header -->
   <header class="sticky top-0 z-[1200] border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
     <div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-6">
       <div class="flex min-w-0 items-center gap-2">
-        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/20">
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        <!-- Custom Brand Icon: Bike / E-Scooter split diagonally by "/" -->
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 via-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/25 ring-1 ring-white/20">
+          <svg class="h-6 w-6" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Top-Left Half: Bike -->
+            <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6.8" cy="14.5" r="2.7" />
+              <path d="M6.8 14.5 L10.6 9.5 L15.2 9.5" />
+              <path d="M9.6 7.5 L12.2 7.5" />
+              <path d="M13.6 7.2 L15.8 7.2" />
+            </g>
+            <!-- Crisp Diagonal Divider "/" -->
+            <line x1="22.8" y1="4.8" x2="9.2" y2="27.2" stroke="white" stroke-width="2.2" stroke-linecap="round" opacity="0.95" />
+            <!-- Bottom-Right Half: E-Scooter -->
+            <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="17.8" cy="24.2" r="2.1" />
+              <circle cx="26.2" cy="24.2" r="2.1" />
+              <path d="M19.8 24.2 L24.2 24.2 L25.6 15.2 L23.5 14.4" />
+            </g>
           </svg>
         </div>
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
-            <h1 class="truncate text-xs font-extrabold tracking-tight text-white sm:text-base">
-              Ciclovias DF
+            <h1 class="whitespace-nowrap text-sm font-extrabold tracking-tight text-white sm:text-base">
+              Ciclovias<span class="text-emerald-400">DF</span>
             </h1>
             <span class="hidden rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-300 md:inline-block">
               JET 20 km/h = 28 min
@@ -259,12 +274,12 @@
       <!-- Primary App Tabs (Navegação GPS Default First, Simulador Second) -->
       <nav class="flex shrink-0 items-center rounded-xl border border-slate-800 bg-slate-900 p-1 text-xs shadow-inner">
         <button type="button" id="tabBtnNavigation"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950 transition">
+          class="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 font-extrabold text-slate-950 transition sm:px-3">
           <span>🧭</span>
           <span>Navegação GPS</span>
         </button>
         <button type="button" id="tabBtnSimulator"
-          class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white">
+          class="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-bold text-slate-300 transition hover:text-white sm:px-3">
           <span>🗺️</span>
           <span>Simulador</span>
         </button>
@@ -564,6 +579,48 @@
               <span id="playbackTimeLabel" class="w-16 text-right font-mono text-[11px] font-bold text-sky-400">0 min</span>
             </div>
           </div>
+
+          <!-- Komoot-Inspired Elevation Profile & Way-Type Surface Breakdown -->
+          <div id="komootAnalyticsCard" class="border-t border-slate-800 bg-slate-950/90 px-4 py-3.5">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-400">📈 Altimetria & Superfície</span>
+                <span class="rounded-md border border-slate-800 bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">Estilo Komoot</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2.5 font-mono text-[11px]">
+                <span class="text-emerald-400" title="Subida acumulada">↗ <strong id="elevAscentVal">+84 m</strong></span>
+                <span class="text-sky-400" title="Descida acumulada">↘ <strong id="elevDescentVal">-73 m</strong></span>
+                <span class="text-amber-400" title="Inclinação máxima">⛰️ <strong id="elevMaxGradeVal">4,2%</strong></span>
+                <span id="elevMinMaxRange" class="hidden text-slate-400 sm:inline">1050–1114 m</span>
+              </div>
+            </div>
+
+            <!-- Interactive SVG Elevation Chart (hover/touch syncs with map rider position) -->
+            <div id="elevationChartWrap" class="relative h-24 w-full cursor-crosshair overflow-hidden rounded-xl border border-slate-800/90 bg-slate-900/70">
+              <svg id="elevationChartSvg" viewBox="0 0 600 96" preserveAspectRatio="none" class="h-full w-full"></svg>
+              <div id="elevHoverTooltip" class="pointer-events-none absolute right-2 top-1.5 rounded-md border border-slate-700/80 bg-slate-950/90 px-2 py-0.5 font-mono text-[10px] text-slate-200">
+                Toque/arraste no gráfico para inspecionar subidas
+              </div>
+            </div>
+
+            <!-- Way-Type / Surface Stacked Progress Bar -->
+            <div class="mt-3">
+              <div class="mb-1 flex items-center justify-between text-[10px]">
+                <span class="font-bold uppercase tracking-wider text-slate-400">Tipo de Via Estimado</span>
+                <span id="surfaceSummaryLabel" class="font-mono text-slate-300">Ciclovia Real + Calçadas Pavimentadas</span>
+              </div>
+              <div id="surfaceStackedBar" class="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+                <div id="barCycleSeg" class="h-full bg-emerald-500 transition-all duration-300" style="width: 78%"></div>
+                <div id="barCalmSeg" class="h-full bg-sky-400 transition-all duration-300" style="width: 17%"></div>
+                <div id="barCrossSeg" class="h-full bg-rose-500 transition-all duration-300" style="width: 5%"></div>
+              </div>
+              <div class="mt-1.5 flex flex-wrap items-center gap-3 text-[10px] text-slate-400">
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Ciclovia Real: <strong id="pctCycleLbl" class="font-mono text-emerald-300">78%</strong></span>
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-sky-400"></span>Calçada / Via Calma: <strong id="pctCalmLbl" class="font-mono text-sky-300">17%</strong></span>
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-rose-500"></span>Travessias Arteriais: <strong id="pctCrossLbl" class="font-mono text-rose-300">5%</strong></span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Route Cards & Preset Export/Import Bar -->
@@ -571,7 +628,7 @@
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 class="text-sm font-extrabold text-white">Rotas Disponíveis & Trajeto Oficial</h2>
-              <p class="text-[11px] text-slate-400">Alinhe as rotas alternativas às ciclovias reais ou exporte seus waypoints.</p>
+              <p class="text-[11px] text-slate-400">Compatível com importação/exportação de arquivos <strong>.GPX (Komoot)</strong> e GeoJSON.</p>
             </div>
             <div class="flex flex-wrap items-center gap-1.5">
               <button type="button" id="btnGlueRoutes"
@@ -581,11 +638,11 @@
               </button>
               <button type="button" id="btnExportRoutePreset"
                 class="inline-flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-bold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950">
-                <span>💾 Exportar Rota</span>
+                <span>💾 Exportar GPX</span>
               </button>
               <button type="button" id="btnImportRoutePreset"
                 class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 transition hover:border-slate-500 hover:text-white">
-                <span>📂 Importar Preset</span>
+                <span>📂 Importar GPX/JSON</span>
               </button>
             </div>
           </div>
@@ -969,70 +1026,85 @@
     // 1. CONSTANTS, VEHICLES, ARTERIAL SLOWDOWNS & BUILT-IN ROUTES
     // =========================================================================
     const DEFAULT_DRIVE_URL = 'https://drive.google.com/file/d/1vHnAPAnrsgpeGpsxR-Zx021k9PacsRrm/view?usp=sharing';
-    // Use v2 key for newly drawn user routes so the newly baked-in 235-pt official route loads as default immediately
+    // Use v2 key for newly drawn user routes so the official Komoot GPX route loads as default immediately
     const CUSTOM_ROUTE_STORAGE_KEYS = ['bsb_custom_route_v2'];
 
-    // Exact 235-waypoint official route mapped by user (GeoJSON [lng, lat] format -> converted below to Leaflet [lat, lng])
+    // Brasília, DF Magnetic Declination (WMM 2026: 22.3° West = -22.3°).
+    // Android Chrome deviceorientationabsolute reports Magnetic North, whereas maps (Google Maps / Leaflet) use True North.
+    const BRASILIA_MAGNETIC_DECLINATION_DEG = -22.3;
+
+    // Official Route mapped on Komoot (SHCGN 711 - Câmara dos Deputados) with exact [lng, lat, elevationMeters]
     const OFFICIAL_ROUTE_GEOJSON_COORDS = [
-      [-47.862554, -15.799], [-47.866602, -15.797746], [-47.866548, -15.79756], [-47.869889, -15.796466],
-      [-47.872945, -15.795516], [-47.875209, -15.794805], [-47.875207, -15.794778], [-47.875118, -15.794552],
-      [-47.874865, -15.793885], [-47.874819, -15.793769], [-47.874799, -15.793696], [-47.874798, -15.793689],
-      [-47.874802, -15.793606], [-47.87483, -15.793479], [-47.874718, -15.793133], [-47.874641, -15.793036],
-      [-47.874559, -15.792977], [-47.874172, -15.792859], [-47.874129, -15.792836], [-47.874043, -15.792777],
-      [-47.873955, -15.792483], [-47.873596, -15.791373], [-47.873292, -15.790049], [-47.873192, -15.789564],
-      [-47.873198, -15.789497], [-47.873213, -15.789302], [-47.87319, -15.789001], [-47.873225, -15.788671],
-      [-47.873301, -15.788013], [-47.873326, -15.787793], [-47.87332, -15.787516], [-47.87335, -15.78747],
-      [-47.87336, -15.787217], [-47.873418, -15.786848], [-47.873392, -15.786515], [-47.873387, -15.786306],
-      [-47.873412, -15.786249], [-47.873432, -15.786231], [-47.873458, -15.78622], [-47.873485, -15.786162],
-      [-47.873542, -15.786162], [-47.873626, -15.786169], [-47.873618, -15.786322], [-47.873663, -15.786327],
-      [-47.87373, -15.786331], [-47.873736, -15.786278], [-47.873751, -15.78626], [-47.873772, -15.786257],
-      [-47.873866, -15.786296], [-47.873906, -15.786326], [-47.873933, -15.786375], [-47.873975, -15.786426],
-      [-47.87405, -15.786447], [-47.874115, -15.786409], [-47.874567, -15.785963], [-47.874717, -15.785793],
-      [-47.874817, -15.785642], [-47.874852, -15.785557], [-47.874929, -15.785373], [-47.874939, -15.785301],
-      [-47.876976, -15.785213], [-47.877034, -15.7845], [-47.877199, -15.784446], [-47.877542, -15.784472],
-      [-47.877644, -15.784474], [-47.877802, -15.784381], [-47.878052, -15.784281], [-47.878376, -15.784227],
-      [-47.879285, -15.784227], [-47.879678, -15.784182], [-47.879713, -15.784173], [-47.879759, -15.78417],
-      [-47.881484, -15.784059], [-47.881627, -15.784063], [-47.881796, -15.784039], [-47.881905, -15.783894],
-      [-47.881972, -15.783839], [-47.882015, -15.783809], [-47.882052, -15.783795], [-47.882383, -15.783725],
-      [-47.882515, -15.783716], [-47.882556, -15.783716], [-47.882596, -15.783704], [-47.882689, -15.78369],
-      [-47.883697, -15.783655], [-47.883743, -15.783656], [-47.883768, -15.783649], [-47.883794, -15.78364],
-      [-47.883812, -15.783624], [-47.883826, -15.783603], [-47.883845, -15.783549], [-47.883856, -15.783489],
-      [-47.883868, -15.783428], [-47.883893, -15.783298], [-47.884034, -15.783079], [-47.884059, -15.783082],
-      [-47.884103, -15.783087], [-47.884145, -15.783085], [-47.884171, -15.783084], [-47.884303, -15.783135],
-      [-47.884296, -15.783204], [-47.884331, -15.783295], [-47.884411, -15.783301], [-47.884421, -15.783301],
-      [-47.885088, -15.783158], [-47.88552, -15.783158], [-47.886067, -15.783153], [-47.886367, -15.783207],
-      [-47.886559, -15.783173], [-47.886736, -15.783109], [-47.886874, -15.783112], [-47.887, -15.783117],
-      [-47.887388, -15.783142], [-47.887445, -15.783199], [-47.887461, -15.783302], [-47.887477, -15.783398],
-      [-47.887493, -15.783418], [-47.887509, -15.783422], [-47.887692, -15.783421], [-47.887785, -15.783423],
-      [-47.887867, -15.783383], [-47.887901, -15.783361], [-47.888024, -15.783356], [-47.888279, -15.783405],
-      [-47.888322, -15.783404], [-47.888378, -15.783403], [-47.889062, -15.783287], [-47.889344, -15.783297],
-      [-47.889714, -15.783286], [-47.889995, -15.783286], [-47.890356, -15.783269], [-47.890399, -15.783243],
-      [-47.890409, -15.783186], [-47.890412, -15.783152], [-47.890429, -15.782996], [-47.890469, -15.78296],
-      [-47.890521, -15.782943], [-47.890685, -15.782897], [-47.890787, -15.782812], [-47.890729, -15.78256],
-      [-47.890699, -15.782373], [-47.890742, -15.782177], [-47.89071, -15.781633], [-47.890707, -15.781354],
-      [-47.890739, -15.781261], [-47.890735, -15.781238], [-47.890739, -15.781137], [-47.890749, -15.780781],
-      [-47.890752, -15.780652], [-47.890921, -15.77884], [-47.891002, -15.778716], [-47.891013, -15.778546],
-      [-47.891029, -15.778491], [-47.891005, -15.778432], [-47.891027, -15.778015], [-47.891031, -15.777887],
-      [-47.891031, -15.777823], [-47.891109, -15.777707], [-47.891094, -15.777306], [-47.891129, -15.777233],
-      [-47.891137, -15.777009], [-47.891076, -15.776659], [-47.891261, -15.775785], [-47.891294, -15.775532],
-      [-47.891333, -15.775422], [-47.89136, -15.775215], [-47.891284, -15.775074], [-47.891258, -15.774993],
-      [-47.891338, -15.77454], [-47.891368, -15.774455], [-47.891517, -15.774124], [-47.891517, -15.773964],
-      [-47.891527, -15.773767], [-47.891583, -15.773643], [-47.891619, -15.773463], [-47.891812, -15.772376],
-      [-47.891828, -15.772333], [-47.891939, -15.772237], [-47.892071, -15.771448], [-47.892105, -15.771241],
-      [-47.892115, -15.771125], [-47.892084, -15.770907], [-47.892104, -15.77073], [-47.892152, -15.770614],
-      [-47.892166, -15.770577], [-47.892292, -15.770343], [-47.892314, -15.770274], [-47.892249, -15.770049],
-      [-47.892248, -15.769973], [-47.892304, -15.769846], [-47.892735, -15.768491], [-47.893152, -15.767095],
-      [-47.893161, -15.767067], [-47.8932, -15.766943], [-47.893413, -15.766246], [-47.893482, -15.766018],
-      [-47.893695, -15.765303], [-47.893695, -15.765303], [-47.893775, -15.76507], [-47.894003, -15.764378],
-      [-47.894085, -15.764217], [-47.894164, -15.764023], [-47.894219, -15.763831], [-47.89434, -15.763473],
-      [-47.894504, -15.762896], [-47.894653, -15.762385], [-47.894788, -15.761934], [-47.894827, -15.761801],
-      [-47.894956, -15.761685], [-47.895029, -15.761537], [-47.89508, -15.761386], [-47.895122, -15.761094],
-      [-47.895125, -15.76108], [-47.89522, -15.760833], [-47.895419, -15.760288], [-47.89544, -15.760219],
-      [-47.895509, -15.75987], [-47.895533, -15.759667], [-47.895635, -15.759251], [-47.895756, -15.759093],
-      [-47.895783, -15.759044], [-47.895917, -15.758577], [-47.896082, -15.758076], [-47.896102, -15.758007],
-      [-47.896116, -15.758003], [-47.896145, -15.757971], [-47.896198, -15.757907], [-47.896253, -15.757844],
-      [-47.896269, -15.757769], [-47.896199, -15.757609], [-47.89621, -15.757501], [-47.896345, -15.757137],
-      [-47.89635, -15.757129], [-47.895635, -15.756824], [-47.8957, -15.756483]
+      [-47.862638, -15.798967, 1059.4], [-47.863431, -15.798728, 1059.4], [-47.864224, -15.798490, 1060.8],
+      [-47.865017, -15.798251, 1062.3], [-47.865810, -15.798013, 1064.0], [-47.866602, -15.797774, 1065.8],
+      [-47.866609, -15.797706, 1066.0], [-47.866576, -15.797548, 1066.4], [-47.866538, -15.797559, 1066.4],
+      [-47.867153, -15.797330, 1067.8], [-47.867992, -15.797068, 1069.4], [-47.868830, -15.796806, 1071.0],
+      [-47.869676, -15.796539, 1072.6], [-47.870521, -15.796272, 1074.2], [-47.871366, -15.796004, 1075.7],
+      [-47.872211, -15.795737, 1077.1], [-47.873056, -15.795470, 1078.0], [-47.873669, -15.795281, 1078.7],
+      [-47.874281, -15.795092, 1078.6], [-47.874893, -15.794903, 1078.1], [-47.875210, -15.794816, 1077.9],
+      [-47.874819, -15.793769, 1075.7], [-47.874802, -15.793606, 1075.3], [-47.874830, -15.793479, 1074.9],
+      [-47.874718, -15.793133, 1073.9], [-47.874641, -15.793036, 1073.6], [-47.874559, -15.792977, 1073.3],
+      [-47.874172, -15.792859, 1072.2], [-47.874043, -15.792777, 1071.7], [-47.873596, -15.791373, 1067.3],
+      [-47.873192, -15.789564, 1061.4], [-47.873198, -15.789497, 1061.2], [-47.873213, -15.789302, 1060.7],
+      [-47.873190, -15.789001, 1059.8], [-47.873225, -15.788671, 1058.9], [-47.873301, -15.788013, 1057.0],
+      [-47.873326, -15.787793, 1056.3], [-47.873320, -15.787516, 1055.9], [-47.873350, -15.787470, 1055.8],
+      [-47.873360, -15.787217, 1055.3], [-47.873418, -15.786848, 1054.7], [-47.873387, -15.786306, 1053.8],
+      [-47.873485, -15.786162, 1053.5], [-47.873542, -15.786162, 1053.4], [-47.873626, -15.786169, 1053.3],
+      [-47.873618, -15.786322, 1053.1], [-47.873663, -15.786327, 1053.1], [-47.873730, -15.786331, 1053.0],
+      [-47.873736, -15.786278, 1053.0], [-47.873772, -15.786257, 1053.0], [-47.873866, -15.786296, 1052.9],
+      [-47.873933, -15.786375, 1052.8], [-47.873975, -15.786426, 1052.7], [-47.874050, -15.786447, 1052.7],
+      [-47.874115, -15.786409, 1052.6], [-47.874717, -15.785793, 1051.9], [-47.874852, -15.785557, 1051.7],
+      [-47.874929, -15.785373, 1051.5], [-47.874964, -15.784907, 1051.0], [-47.874848, -15.784510, 1050.5],
+      [-47.874542, -15.784096, 1050.0], [-47.874111, -15.783673, 1050.7], [-47.874054, -15.783497, 1051.0],
+      [-47.874536, -15.783545, 1051.8], [-47.874721, -15.783533, 1052.2], [-47.875442, -15.783566, 1053.5],
+      [-47.875819, -15.783550, 1054.3], [-47.876079, -15.783515, 1054.8], [-47.876436, -15.783537, 1055.6],
+      [-47.876757, -15.783525, 1056.3], [-47.876876, -15.783539, 1056.5], [-47.876979, -15.783598, 1056.8],
+      [-47.877068, -15.783639, 1057.0], [-47.877081, -15.783676, 1057.1], [-47.877094, -15.783734, 1057.3],
+      [-47.877077, -15.783848, 1057.6], [-47.877032, -15.783894, 1057.8], [-47.877029, -15.784009, 1058.1],
+      [-47.877034, -15.784396, 1059.2], [-47.877036, -15.784498, 1059.5], [-47.877199, -15.784446, 1059.9],
+      [-47.877644, -15.784474, 1061.1], [-47.877802, -15.784381, 1061.7], [-47.878052, -15.784281, 1062.5],
+      [-47.878376, -15.784227, 1063.9], [-47.879285, -15.784227, 1067.7], [-47.879704, -15.784176, 1069.4],
+      [-47.880567, -15.784115, 1073.1], [-47.881431, -15.784055, 1076.8], [-47.881627, -15.784063, 1077.7],
+      [-47.881796, -15.784039, 1078.2], [-47.881905, -15.783894, 1078.7], [-47.882015, -15.783809, 1079.2],
+      [-47.882383, -15.783725, 1080.2], [-47.882689, -15.783690, 1081.1], [-47.883743, -15.783656, 1084.1],
+      [-47.883812, -15.783624, 1084.3], [-47.883845, -15.783549, 1084.5], [-47.883856, -15.783489, 1084.6],
+      [-47.883868, -15.783428, 1084.8], [-47.883893, -15.783298, 1085.2], [-47.884034, -15.783079, 1085.9],
+      [-47.884059, -15.783082, 1085.9], [-47.884103, -15.783087, 1086.0], [-47.884145, -15.783085, 1086.2],
+      [-47.884308, -15.783079, 1086.6], [-47.884296, -15.783204, 1086.9], [-47.884331, -15.783295, 1087.2],
+      [-47.884421, -15.783301, 1087.4], [-47.885088, -15.783158, 1089.7], [-47.886067, -15.783153, 1093.3],
+      [-47.886367, -15.783207, 1094.5], [-47.886559, -15.783173, 1095.2], [-47.886736, -15.783109, 1095.9],
+      [-47.887000, -15.783117, 1096.8], [-47.887388, -15.783142, 1098.2], [-47.887445, -15.783199, 1098.5],
+      [-47.887461, -15.783302, 1098.9], [-47.887477, -15.783398, 1099.2], [-47.887509, -15.783422, 1099.4],
+      [-47.887692, -15.783421, 1100.0], [-47.887785, -15.783423, 1100.4], [-47.887901, -15.783361, 1100.8],
+      [-47.888024, -15.783356, 1101.3], [-47.888279, -15.783405, 1101.9], [-47.889062, -15.783287, 1103.2],
+      [-47.889995, -15.783286, 1104.7], [-47.890356, -15.783269, 1105.1], [-47.890399, -15.783243, 1105.1],
+      [-47.890409, -15.783186, 1105.2], [-47.890412, -15.783152, 1105.3], [-47.890429, -15.782996, 1105.4],
+      [-47.890521, -15.782943, 1105.6], [-47.890685, -15.782897, 1105.8], [-47.890810, -15.782867, 1105.9],
+      [-47.890699, -15.782373, 1106.5], [-47.890742, -15.782177, 1106.7], [-47.890707, -15.781354, 1107.8],
+      [-47.890739, -15.781261, 1107.9], [-47.890739, -15.781137, 1108.1], [-47.890749, -15.780781, 1108.6],
+      [-47.890921, -15.778840, 1111.5], [-47.891002, -15.778716, 1111.7], [-47.891029, -15.778491, 1112.0],
+      [-47.891005, -15.778432, 1112.0], [-47.891031, -15.777887, 1112.5], [-47.891031, -15.777823, 1112.5],
+      [-47.891109, -15.777707, 1112.7], [-47.891094, -15.777306, 1113.0], [-47.891129, -15.777233, 1113.0],
+      [-47.891137, -15.777009, 1113.2], [-47.891076, -15.776659, 1113.5], [-47.891360, -15.775215, 1114.2],
+      [-47.891258, -15.774993, 1114.2], [-47.891368, -15.774455, 1113.7], [-47.891517, -15.774124, 1113.4],
+      [-47.891527, -15.773767, 1113.1], [-47.891583, -15.773643, 1113.0], [-47.891644, -15.773352, 1112.7],
+      [-47.891669, -15.773281, 1112.7], [-47.891726, -15.772909, 1111.9], [-47.891756, -15.772682, 1111.5],
+      [-47.891779, -15.772550, 1111.2], [-47.891828, -15.772333, 1110.8], [-47.891939, -15.772237, 1110.5],
+      [-47.892071, -15.771448, 1108.9], [-47.892105, -15.771241, 1108.6], [-47.892115, -15.771125, 1108.4],
+      [-47.892084, -15.770907, 1108.0], [-47.892104, -15.770730, 1107.7], [-47.892314, -15.770274, 1106.8],
+      [-47.892249, -15.770049, 1106.4], [-47.892248, -15.769973, 1106.3], [-47.892446, -15.769524, 1105.1],
+      [-47.892459, -15.769406, 1104.8], [-47.892562, -15.769069, 1103.9], [-47.892569, -15.769042, 1103.8],
+      [-47.893200, -15.766943, 1097.8], [-47.893413, -15.766246, 1095.7], [-47.893695, -15.765303, 1092.9],
+      [-47.894003, -15.764378, 1090.1], [-47.894085, -15.764217, 1089.5], [-47.894164, -15.764023, 1088.9],
+      [-47.894219, -15.763831, 1088.2], [-47.894340, -15.763473, 1087.0], [-47.894788, -15.761934, 1082.6],
+      [-47.894827, -15.761801, 1082.3], [-47.894956, -15.761685, 1081.8], [-47.895029, -15.761537, 1081.4],
+      [-47.895080, -15.761386, 1081.0], [-47.895122, -15.761094, 1080.1], [-47.895440, -15.760219, 1077.1],
+      [-47.895533, -15.759667, 1075.2], [-47.895635, -15.759251, 1074.1], [-47.895783, -15.759044, 1073.4],
+      [-47.895917, -15.758577, 1072.2], [-47.896116, -15.758003, 1070.6], [-47.896145, -15.757971, 1070.5],
+      [-47.896198, -15.757907, 1070.3], [-47.896253, -15.757844, 1070.2], [-47.896269, -15.757769, 1070.2],
+      [-47.896199, -15.757609, 1070.2], [-47.896210, -15.757501, 1070.2], [-47.896345, -15.757137, 1070.2],
+      [-47.896305, -15.757123, 1070.2], [-47.896240, -15.757039, 1070.2], [-47.896119, -15.757003, 1070.2],
+      [-47.895581, -15.756846, 1070.2], [-47.895675, -15.756582, 1070.2]
     ];
 
     // Major Brasília arterial avenue centerlines used for exact perpendicular intersection detection.
@@ -1078,16 +1150,15 @@
         name: 'Travessia Av. W3 Norte',
         shortTag: 'W3',
         danger: 'alta',
-        delaySec: 70,
-        note: 'Fim de ciclovia / cruzamento na Av. W3 Norte com faixa exclusiva de ônibus. Atravesse apenas com sinal verde.',
+        delaySec: 60,
+        note: 'Cruzamento da Av. W3 Norte (faixa exclusiva de ônibus e carros). Use a faixa semafórica.',
         coords: [
-          [-15.8050, -47.8940],
-          [-15.7934, -47.8888],
-          [-15.78335, -47.8886],
-          [-15.7745, -47.8891],
-          [-15.7653, -47.8914],
-          [-15.7570, -47.8939],
-          [-15.7470, -47.8972]
+          [-15.7920, -47.8895],
+          [-15.7834, -47.8886],
+          [-15.7745, -47.8892],
+          [-15.7653, -47.8915],
+          [-15.7570, -47.8940],
+          [-15.7470, -47.8973]
         ]
       },
       {
@@ -1095,14 +1166,13 @@
         name: 'Travessia Via N1 (Eixo Monumental)',
         shortTag: 'N1',
         danger: 'alta',
-        delaySec: 60,
-        note: 'Travessia transversal das 6 faixas do Eixo Monumental (Via N1). Utilize a faixa semafórica.',
+        delaySec: 50,
+        note: 'Travessia transversal na Via N1 (Esplanada). Redobre a atenção nas faixas de alta velocidade.',
         coords: [
-          [-15.7998, -47.8615],
-          [-15.7950, -47.8758],
-          [-15.7924, -47.8830],
-          [-15.7885, -47.8950],
-          [-15.7845, -47.9070]
+          [-15.8005, -47.8605],
+          [-15.7966, -47.8725],
+          [-15.7932, -47.8832],
+          [-15.7895, -47.8950]
         ]
       },
       {
@@ -1110,14 +1180,58 @@
         name: 'Travessia Via L4 Norte',
         shortTag: 'L4',
         danger: 'alta',
-        delaySec: 65,
-        note: 'Cruzamento da Via L4 Norte (fluxo rápido próximo à UnB/Lago). Atenção redobrada.',
+        delaySec: 55,
+        note: 'Travessia na Via L4 Norte (tráfego rápido). Utilize passarela ou semáforo.',
         coords: [
-          [-15.7980, -47.8565],
-          [-15.7860, -47.8615],
-          [-15.7740, -47.8650],
-          [-15.7620, -47.8685],
-          [-15.7480, -47.8730]
+          [-15.7980, -47.8615],
+          [-15.7840, -47.8665],
+          [-15.7700, -47.8690],
+          [-15.7550, -47.8715]
+        ]
+      }
+    ];
+
+    // Built-in routes: Default is user's exact Komoot GPX mapped official route with real elevation
+    const OFFICIAL_LEAFLET_COORDS = OFFICIAL_ROUTE_GEOJSON_COORDS.map(([lng, lat]) => [lat, lng]);
+    const OFFICIAL_ELEVATIONS = OFFICIAL_ROUTE_GEOJSON_COORDS.map(([, , ele]) => ele);
+
+    const BUILTIN_ROUTES = [
+      {
+        id: 'rota-oficial',
+        shortTitle: '★ Rota Oficial (Komoot GPX • 7,9 km)',
+        tag: 'Oficial • Altimetria',
+        isOfficial: true,
+        distanceKm: 7.91,
+        description: 'Trajeto oficial mapeado no Komoot com altimetria real (+84m / -73m): Praça dos Três Poderes → Via N1 → Ciclovia L2 Norte → Travessia Eixão 104N → W3 Norte → Ciclovia W4/W5 Norte → SHCGN 711 Norte.',
+        coords: OFFICIAL_LEAFLET_COORDS,
+        elevations: OFFICIAL_ELEVATIONS
+      },
+      {
+        id: 'rota-sqn',
+        shortTitle: 'Eixo Interno SQN 102–112',
+        tag: 'Arborizada SQN',
+        distanceKm: 8.1,
+        description: 'Usa o início da Rota Oficial até atravessar o Eixão na 104N, sobe pela ciclovia arborizada interna da W1/W2 Norte (SQN 104–112) e corta pela transversal 112/711N.',
+        // Shares exact official path until West of Eixão 104N, then follows true curved W1/W2 Norte
+        coords: [
+          ...OFFICIAL_LEAFLET_COORDS.slice(0, 96),
+          [-15.78050, -47.88435],
+          [-15.77450, -47.88535],
+          [-15.76850, -47.88675],
+          [-15.76250, -47.88850],
+          [-15.75705, -47.89025],
+          [-15.75690, -47.89460],
+          [-15.756582, -47.895675]
+        ],
+        glueAnchors: [
+          [-15.798967, -47.862638],
+          [-15.794816, -47.875210],
+          [-15.786162, -47.873485],
+          [-15.783656, -47.883743],
+          [-15.774500, -47.885350],
+          [-15.762500, -47.888500],
+          [-15.757050, -47.890250],
+          [-15.756582, -47.895675]
         ]
       }
     ];
@@ -1380,56 +1494,13 @@
       }
     ];
 
-    // Built-in routes: Default is user's exact 235-waypoint mapped official route (7.75 km)
-    const OFFICIAL_LEAFLET_COORDS = OFFICIAL_ROUTE_GEOJSON_COORDS.map(([lng, lat]) => [lat, lng]);
-
-    const BUILTIN_ROUTES = [
-      {
-        id: 'rota-oficial',
-        shortTitle: '★ Rota Oficial (Meu Trajeto • 235 pts)',
-        tag: 'Oficial • Padrão',
-        isOfficial: true,
-        distanceKm: 7.75,
-        description: 'Trajeto oficial mapeado por você (235 waypoints • 7,75 km): Praça dos Três Poderes → Via N1 → L2 Norte → Travessia Eixão 104/106N → W3 Norte → Ciclovia W4/W5 Norte → SHCGN 711 Norte.',
-        coords: OFFICIAL_LEAFLET_COORDS
-      },
-      {
-        id: 'rota-sqn',
-        shortTitle: 'Eixo Interno SQN 102–112',
-        tag: 'Arborizada SQN',
-        distanceKm: 8.1,
-        description: 'Usa o início da Rota Oficial até atravessar o Eixão na 104N, sobe pela ciclovia arborizada interna da W1/W2 Norte (SQN 104–112) e corta pela transversal 112/711N.',
-        // Shares exact official path until West of Eixão 104N, then follows true curved W1/W2 Norte
-        coords: [
-          ...OFFICIAL_LEAFLET_COORDS.slice(0, 96),
-          [-15.78050, -47.88435],
-          [-15.77450, -47.88535],
-          [-15.76850, -47.88675],
-          [-15.76250, -47.88850],
-          [-15.75705, -47.89025],
-          [-15.75690, -47.89460],
-          [-15.756483, -47.895700]
-        ],
-        glueAnchors: [
-          [-15.799000, -47.862554],
-          [-15.794805, -47.875209],
-          [-15.786162, -47.873485],
-          [-15.783655, -47.883697],
-          [-15.774500, -47.885350],
-          [-15.762500, -47.888500],
-          [-15.757050, -47.890250],
-          [-15.756483, -47.895700]
-        ]
-      }
-    ];
-
     // Built-in Brasília Cycling Network aligned to the true Asa Norte curvature
     const DEFAULT_CYCLING_LINES = [
       { name: 'Ciclovia Eixo Monumental (N1)', type: 'ciclovia', coords: [[-15.79900, -47.86255], [-15.79775, -47.86660], [-15.79647, -47.86989], [-15.79481, -47.87521], [-15.79245, -47.88240], [-15.78980, -47.89020]] },
-      { name: 'Ciclovia W4/W5 Norte', type: 'ciclovia', coords: OFFICIAL_LEAFLET_COORDS.slice(138) },
+      { name: 'Ciclovia W4/W5 Norte', type: 'ciclovia', coords: OFFICIAL_LEAFLET_COORDS.slice(130) },
       { name: 'Ciclovia W1/W2 Norte (SQN)', type: 'ciclovia', coords: [[-15.78950, -47.88320], [-15.78366, -47.88370], [-15.78050, -47.88435], [-15.77450, -47.88535], [-15.76850, -47.88675], [-15.76250, -47.88850], [-15.75705, -47.89025], [-15.75050, -47.89240]] },
       { name: 'Ciclovia L2/L3 Norte', type: 'ciclovia', coords: [[-15.79481, -47.87521], [-15.79248, -47.87396], [-15.78616, -47.87349], [-15.78050, -47.87395], [-15.77450, -47.87495], [-15.76850, -47.87635], [-15.76250, -47.87815], [-15.75685, -47.87990], [-15.75050, -47.88190]] },
-      { name: 'Transversal 104/704 Norte (Rota Oficial)', type: 'ciclovia', coords: OFFICIAL_LEAFLET_COORDS.slice(58, 140) },
+      { name: 'Transversal 104/704 Norte (Rota Oficial)', type: 'ciclovia', coords: OFFICIAL_LEAFLET_COORDS.slice(58, 132) },
       { name: 'Transversal 106/706 Norte', type: 'ciclovia', coords: [[-15.77450, -47.87495], [-15.77450, -47.88535], [-15.77454, -47.89134]] },
       { name: 'Transversal 108/708 Norte', type: 'ciclovia', coords: [[-15.76850, -47.87635], [-15.76850, -47.88675], [-15.76849, -47.89274]] },
       { name: 'Transversal 110/710 Norte', type: 'ciclovia', coords: [[-15.76250, -47.87815], [-15.76250, -47.88850], [-15.76239, -47.89465]] },
@@ -1739,7 +1810,11 @@
         ? Math.pow(1 / speedRatio, 0.65)
         : Math.min(1.14, 1 + (1 - speedRatio) * 0.22);
 
-      const realRangeKm = +(vehicle.nominalRangeKm * activeMode.rangeMult * weightFactor * speedFactor).toFixed(1);
+      // Elevation climb penalty (real Komoot altitude data if available)
+      const elevStats = computeRouteElevationStats(route);
+      const climbPenaltyFactor = Math.max(0.86, 1 - (elevStats.ascentM / 1000) * 0.35);
+
+      const realRangeKm = +(vehicle.nominalRangeKm * activeMode.rangeMult * weightFactor * speedFactor * climbPenaltyFactor).toFixed(1);
       const tripDistanceKm = +(isRoundTrip ? distanceKm * 2 : distanceKm).toFixed(2);
       const batteryUsedPct = (tripDistanceKm / Math.max(1, realRangeKm)) * 100;
       const batteryLeftPct = Math.max(0, Math.round(100 - batteryUsedPct));
@@ -1755,8 +1830,139 @@
         roundTripMin,
         effectiveAvgSpeed,
         realRangeKm,
-        batteryLeftPct
+        batteryLeftPct,
+        elevStats
       };
+    }
+
+    // =========================================================================
+    // 3B. KOMOOT-INSPIRED ELEVATION PROFILE & WAY-TYPE SURFACE ANALYTICS
+    // =========================================================================
+    function getOrEstimateElevations(route) {
+      if (Array.isArray(route.elevations) && route.elevations.length === route.coords.length) {
+        return route.elevations;
+      }
+      // Smooth Brasília Plano Piloto topography estimate (east near Lago/L2 ~1050m, west near W4/W5 ~1110m)
+      return route.coords.map(([lat, lng]) => {
+        const westFactor = Math.max(0, Math.min(1, (-47.860 - lng) / 0.036));
+        const northSlope = Math.max(0, Math.min(1, (lat + 15.80) / 0.045));
+        const hill = 1054 + westFactor * 54 + Math.sin(northSlope * Math.PI) * 8;
+        return +hill.toFixed(1);
+      });
+    }
+
+    function computeRouteElevationStats(route) {
+      const coords = route.coords || [];
+      const eles = getOrEstimateElevations(route);
+      if (eles.length < 2) {
+        return { eles: [1060], ascentM: 0, descentM: 0, minEle: 1060, maxEle: 1060, maxGradePct: 0, cumDist: [0] };
+      }
+
+      const cumDist = buildCumulativeDistances(coords);
+      let ascentM = 0;
+      let descentM = 0;
+      let minEle = Infinity;
+      let maxEle = -Infinity;
+      let maxGradePct = 0;
+
+      for (let i = 0; i < eles.length; i++) {
+        if (eles[i] < minEle) minEle = eles[i];
+        if (eles[i] > maxEle) maxEle = eles[i];
+        if (i > 0) {
+          const dEle = eles[i] - eles[i - 1];
+          const dDist = cumDist[i] - cumDist[i - 1];
+          if (dEle > 0) ascentM += dEle;
+          else descentM += Math.abs(dEle);
+          if (dDist >= 25) {
+            const grade = (Math.abs(dEle) / dDist) * 100;
+            if (grade > maxGradePct && grade < 18) maxGradePct = grade;
+          }
+        }
+      }
+
+      return {
+        eles,
+        cumDist,
+        ascentM: Math.round(ascentM),
+        descentM: Math.round(descentM),
+        minEle: Math.round(minEle),
+        maxEle: Math.round(maxEle),
+        maxGradePct: +maxGradePct.toFixed(1)
+      };
+    }
+
+    function renderKomootRouteAnalytics(route, metrics) {
+      const svg = document.getElementById('elevationChartSvg');
+      if (!svg || !route || !Array.isArray(route.coords) || route.coords.length < 2) return;
+
+      const stats = metrics.elevStats || computeRouteElevationStats(route);
+      const { eles, cumDist, ascentM, descentM, minEle, maxEle, maxGradePct } = stats;
+      const totalM = Math.max(1, cumDist[cumDist.length - 1]);
+
+      document.getElementById('elevAscentVal').textContent = `+${ascentM} m`;
+      document.getElementById('elevDescentVal').textContent = `-${descentM} m`;
+      document.getElementById('elevMaxGradeVal').textContent = `${maxGradePct.toFixed(1).replace('.', ',')}%`;
+      const minMaxEl = document.getElementById('elevMinMaxRange');
+      if (minMaxEl) minMaxEl.textContent = `${minEle}–${maxEle} m`;
+
+      const W = 600;
+      const H = 96;
+      const padTop = 14;
+      const padBot = 10;
+      const spanEle = Math.max(15, maxEle - minEle);
+
+      const pts = eles.map((e, i) => {
+        const x = (cumDist[i] / totalM) * W;
+        const y = H - padBot - ((e - minEle) / spanEle) * (H - padTop - padBot);
+        return [x, y];
+      });
+
+      const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+      const areaPath = `${linePath} L${W},${H} L0,${H} Z`;
+      const cursorX = (state.playback.progress * W).toFixed(1);
+
+      // Find current elevation at playback cursor
+      const targetM = state.playback.progress * totalM;
+      let curIdx = 0;
+      while (curIdx < cumDist.length - 1 && cumDist[curIdx] < targetM) curIdx++;
+      const curY = pts[curIdx] ? pts[curIdx][1].toFixed(1) : (H / 2);
+
+      svg.innerHTML = `
+        <defs>
+          <linearGradient id="komootElevFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#10b981" stop-opacity="0.48" />
+            <stop offset="100%" stop-color="#0284c7" stop-opacity="0.06" />
+          </linearGradient>
+        </defs>
+        <line x1="0" y1="${padTop}" x2="${W}" y2="${padTop}" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1" />
+        <line x1="0" y1="${(H / 2).toFixed(0)}" x2="${W}" y2="${(H / 2).toFixed(0)}" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1" />
+        <path d="${areaPath}" fill="url(#komootElevFill)" />
+        <path d="${linePath}" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" />
+        <line id="elevCursorLine" x1="${cursorX}" y1="0" x2="${cursorX}" y2="${H}" stroke="#38bdf8" stroke-width="1.8" stroke-dasharray="3 2" />
+        <circle id="elevCursorDot" cx="${cursorX}" cy="${curY}" r="4.5" fill="#38bdf8" stroke="#ffffff" stroke-width="2" />
+      `;
+
+      // Surface / Way-Type Stacked Bar (Ciclovia Real vs Calçadas/Vias Calmas vs Travessias)
+      const dense = densifyPolyline(route.coords, 40);
+      let onCycle = 0;
+      for (const pt of dense) {
+        if (findNearestCycleSnap(pt[0], pt[1], 28)) onCycle++;
+      }
+      const rawCyclePct = dense.length > 0 ? Math.round((onCycle / dense.length) * 100) : 70;
+      const crossCount = metrics.slowdowns.length;
+      const crossPct = Math.min(18, Math.max(2, crossCount * 3));
+      const cyclePct = Math.min(100 - crossPct, rawCyclePct);
+      const calmPct = Math.max(0, 100 - cyclePct - crossPct);
+
+      document.getElementById('barCycleSeg').style.width = `${cyclePct}%`;
+      document.getElementById('barCalmSeg').style.width = `${calmPct}%`;
+      document.getElementById('barCrossSeg').style.width = `${crossPct}%`;
+      document.getElementById('pctCycleLbl').textContent = `${cyclePct}%`;
+      document.getElementById('pctCalmLbl').textContent = `${calmPct}%`;
+      document.getElementById('pctCrossLbl').textContent = `${crossPct}% (${crossCount} pts)`;
+      document.getElementById('surfaceSummaryLabel').textContent = route.elevations
+        ? 'Altimetria Real GPX (Komoot)'
+        : 'Altimetria Estimada DF';
     }
 
     // =========================================================================
@@ -2635,6 +2841,28 @@
       document.getElementById('playbackSlider').value = Math.round(progress * 1000);
       document.getElementById('playbackDistLabel').textContent = `${currentKm} km`;
       document.getElementById('playbackTimeLabel').textContent = `${currentMin} min`;
+
+      // Sync Komoot Elevation Chart cursor live with playback position
+      const cursorLine = document.getElementById('elevCursorLine');
+      const cursorDot = document.getElementById('elevCursorDot');
+      const tooltipEl = document.getElementById('elevHoverTooltip');
+      if (cursorLine && cursorDot && m.elevStats) {
+        const { eles, cumDist, minEle, maxEle } = m.elevStats;
+        const totalM = Math.max(1, cumDist[cumDist.length - 1]);
+        const targetM = progress * totalM;
+        let idx = 0;
+        while (idx < cumDist.length - 1 && cumDist[idx] < targetM) idx++;
+        const x = (progress * 600).toFixed(1);
+        const span = Math.max(15, maxEle - minEle);
+        const y = (96 - 10 - ((eles[idx] - minEle) / span) * (96 - 24)).toFixed(1);
+        cursorLine.setAttribute('x1', x);
+        cursorLine.setAttribute('x2', x);
+        cursorDot.setAttribute('cx', x);
+        cursorDot.setAttribute('cy', y);
+        if (tooltipEl) {
+          tooltipEl.textContent = `Km ${currentKm} • Alt: ${Math.round(eles[idx])} m`;
+        }
+      }
 
       let segText = 'Em deslocamento pela malha cicloviária';
       if (progress <= 0.03) segText = 'Saída: Praça dos Três Poderes / Câmara';
@@ -3792,59 +4020,102 @@
       const route = getActiveRouteObject();
       if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
 
-      const geojson = {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            properties: {
-              name: route.shortTitle,
-              distanceKm: route.distanceKm,
-              exportedAt: new Date().toISOString()
-            },
-            geometry: {
-              type: 'LineString',
-              coordinates: route.coords.map(([lat, lng]) => [+lng.toFixed(6), +lat.toFixed(6)])
-            }
-          }
-        ]
-      };
+      const eles = getOrEstimateElevations(route);
+      const safeName = String(route.shortTitle || 'Rota CicloviasDF').replace(/[<>&'"]/g, '');
+      const trkpts = route.coords.map(([lat, lng], idx) => {
+        const ele = typeof eles[idx] === 'number' ? eles[idx].toFixed(1) : '1070.0';
+        return `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"><ele>${ele}</ele></trkpt>`;
+      }).join('\n');
 
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
+      const gpxXml = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="CicloviasDF" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${safeName}</name></metadata>
+  <trk>
+    <name>${safeName}</name>
+    <type>cycling</type>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+      const blob = new Blob([gpxXml], { type: 'application/gpx+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `rota-mobilidade-df-${route.id}.geojson`;
+      a.download = `cicloviasdf-${route.id}.gpx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast('Rota Exportada!', `${route.coords.length} waypoints salvos em arquivo .geojson.`);
+      showToast('Rota Exportada em GPX!', `${route.coords.length} pontos com altimetria prontos para Komoot/GPS.`);
+    }
+
+    function parseGpxRouteText(xmlText, fallbackTitle) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, 'application/xml');
+      const trkpts = Array.from(xml.querySelectorAll('trkpt, rtept'));
+      if (trkpts.length < 2) throw new Error('Arquivo GPX sem pontos de trajeto válidos.');
+
+      const coords = [];
+      const elevations = [];
+      for (const pt of trkpts) {
+        const lat = parseFloat(pt.getAttribute('lat'));
+        const lon = parseFloat(pt.getAttribute('lon'));
+        if (isNaN(lat) || isNaN(lon)) continue;
+        // Skip exact consecutive duplicates
+        if (coords.length > 0 && coords[coords.length - 1][0] === lat && coords[coords.length - 1][1] === lon) {
+          continue;
+        }
+        coords.push([+lat.toFixed(6), +lon.toFixed(6)]);
+        const eleNode = pt.querySelector('ele');
+        const eleVal = eleNode ? parseFloat(eleNode.textContent) : NaN;
+        if (!isNaN(eleVal)) elevations.push(+eleVal.toFixed(1));
+      }
+
+      const nameNode = xml.querySelector('trk > name, metadata > name');
+      const title = nameNode && nameNode.textContent.trim() ? nameNode.textContent.trim() : fallbackTitle;
+      return {
+        coords,
+        elevations: elevations.length === coords.length ? elevations : null,
+        title
+      };
     }
 
     function handleRoutePresetFile(file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
-          const parsed = JSON.parse(ev.target.result);
+          const text = String(ev.target.result || '');
           let coords = null;
-          let title = file.name.replace(/\.(geo)?json$/i, '');
+          let elevations = null;
+          let title = file.name.replace(/\.(gpx|(geo)?json)$/i, '');
 
-          if (parsed && Array.isArray(parsed.coords) && parsed.coords.length >= 2) {
-            coords = parsed.coords;
-            if (parsed.shortTitle) title = parsed.shortTitle;
-          } else if (parsed && parsed.type === 'FeatureCollection' && Array.isArray(parsed.features)) {
-            const lineFeat = parsed.features.find(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString'));
-            if (lineFeat) {
-              const raw = lineFeat.geometry.type === 'LineString'
-                ? lineFeat.geometry.coordinates
-                : lineFeat.geometry.coordinates[0];
-              coords = raw.map(([lng, lat]) => [lat, lng]);
-              if (lineFeat.properties?.name) title = lineFeat.properties.name;
+          if (/\.gpx$/i.test(file.name) || text.trim().startsWith('<')) {
+            const gpx = parseGpxRouteText(text, title);
+            coords = gpx.coords;
+            elevations = gpx.elevations;
+            title = gpx.title;
+          } else {
+            const parsed = JSON.parse(text);
+            if (parsed && Array.isArray(parsed.coords) && parsed.coords.length >= 2) {
+              coords = parsed.coords;
+              if (parsed.shortTitle) title = parsed.shortTitle;
+              if (Array.isArray(parsed.elevations)) elevations = parsed.elevations;
+            } else if (parsed && parsed.type === 'FeatureCollection' && Array.isArray(parsed.features)) {
+              const lineFeat = parsed.features.find(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString'));
+              if (lineFeat) {
+                const raw = lineFeat.geometry.type === 'LineString'
+                  ? lineFeat.geometry.coordinates
+                  : lineFeat.geometry.coordinates[0];
+                coords = raw.map(([lng, lat]) => [lat, lng]);
+                if (raw.every(p => typeof p[2] === 'number')) elevations = raw.map(p => +p[2].toFixed(1));
+                if (lineFeat.properties?.name) title = lineFeat.properties.name;
+              }
+            } else if (parsed && parsed.type === 'Feature' && parsed.geometry?.type === 'LineString') {
+              coords = parsed.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+              if (parsed.properties?.name) title = parsed.properties.name;
             }
-          } else if (parsed && parsed.type === 'Feature' && parsed.geometry?.type === 'LineString') {
-            coords = parsed.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-            if (parsed.properties?.name) title = parsed.properties.name;
           }
 
           if (!coords || coords.length < 2) {
@@ -3855,12 +4126,13 @@
           const importedRoute = {
             id: 'rota-personalizada',
             shortTitle: `★ ${title} (${coords.length} pts)`,
-            tag: 'Preset Importado',
+            tag: elevations ? 'GPX + Altimetria' : 'Preset Importado',
             isOfficial: true,
             isCustom: true,
             distanceKm: distKm,
-            description: `Preset importado com ${coords.length} waypoints (${distKm.toFixed(2).replace('.', ',')} km).`,
-            coords
+            description: `Rota importada (${coords.length} pontos • ${distKm.toFixed(2).replace('.', ',')} km)${elevations ? ' com perfil real de elevação.' : '.'}`,
+            coords,
+            elevations
           };
 
           state.customSavedRoute = importedRoute;
@@ -3872,10 +4144,11 @@
           resetPlayback();
           drawSelectedRouteOnMap();
           recalculateAll();
+          if (navMap) refreshNavigationRouteLayer();
           map.fitBounds(L.latLngBounds(coords), { padding: [36, 36] });
-          showToast('Preset de Rota Importado!', `${importedRoute.shortTitle} (${distKm.toFixed(2).replace('.', ',')} km) carregada.`);
+          showToast('Rota GPX/JSON Importada!', `${importedRoute.shortTitle} (${distKm.toFixed(2).replace('.', ',')} km) carregada.`);
         } catch (err) {
-          showToast('Erro ao Importar Preset', err.message || 'Formato JSON/GeoJSON inválido.');
+          showToast('Erro ao Importar Rota', err.message || 'Formato GPX/JSON inválido.');
         }
       };
       reader.readAsText(file);
@@ -4077,6 +4350,7 @@
       }
 
       renderRouteCards();
+      renderKomootRouteAnalytics(route, m);
       renderCatalog();
       renderComparisonTable();
       updatePlaybackPosition(state.playback.progress);
@@ -4692,29 +4966,25 @@
 
       const rotator = document.getElementById('navMapRotator');
       if (rotator) {
-        rotator.style.transform = `rotate(${-state.nav.mapBearing.toFixed(2)}deg)`;
+        rotator.style.transform = `rotate(${(-state.nav.mapBearing).toFixed(2)}deg)`;
         rotator.style.setProperty('--nav-counter-rot', `${state.nav.mapBearing.toFixed(2)}deg`);
       }
 
-      // Rotate HUD compass needle to always point toward true North
       const needle = document.getElementById('navCompassNeedleSvg');
       if (needle) {
-        needle.style.transform = `rotate(${-state.nav.mapBearing.toFixed(1)}deg)`;
+        needle.style.transform = `rotate(${(-state.nav.mapBearing).toFixed(1)}deg)`;
       }
 
-      // Keep GPS directional puck aligned with user heading relative to current map rotation
       updateNavPuckArrow();
     }
 
     function updateNavPuckArrow() {
-      const arrowEl = document.getElementById('navGpsArrowInner');
-      if (!arrowEl) return;
-      const pointerHeading = (state.nav.currentSpeedKmh < 5 && state.nav.deviceCompassHeading !== null)
+      const arrow = document.getElementById('navGpsArrowInner');
+      if (!arrow) return;
+      const activeHeading = (state.nav.currentSpeedKmh < 6 && state.nav.deviceCompassHeading !== null && !state.nav.isDemoMode)
         ? state.nav.deviceCompassHeading
         : state.nav.currentHeading;
-      // Inside rotated #navMapRotator, the puck is already rotated by -mapBearing, so rotating it by +pointerHeading
-      // points it straight UP whenever mapBearing === pointerHeading (like Google Maps / Waze)!
-      arrowEl.style.transform = `rotate(${pointerHeading.toFixed(1)}deg)`;
+      arrow.style.transform = `rotate(${(activeHeading || 0).toFixed(1)}deg)`;
     }
 
     function updateCompassBtnVisual() {
@@ -4727,31 +4997,74 @@
         tag.textContent = 'AUTO';
         tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-emerald-300';
       } else {
+        const isNorth = Math.abs(normalizeAngleDiff(state.nav.mapBearing)) < 2;
         btn.className = 'flex h-12 w-12 flex-col items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-white shadow-xl backdrop-blur-md transition active:scale-95';
-        tag.textContent = Math.abs(normalizeAngleDiff(state.nav.mapBearing)) < 3 ? 'NORTE' : 'LIVRE';
+        tag.textContent = isNorth ? 'NORTE' : 'LIVRE';
         tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-slate-300';
       }
     }
 
-    // Smartphone Compass Listener (follows where the Android phone is pointing like Google Maps / Waze)
+    // 3D Tilt-Compensated Compass Heading (W3C Intrinsic Z-X'-Y'' Tait-Bryan Euler Angles)
+    // Projects the phone's horizontal forward vector v = (0, cos(beta), -sin(beta)) onto world (East, North),
+    // eliminating the 15°–40° heading error that occurs when holding a phone tilted in hand or on a scooter handlebar.
+    function computeTiltCompensatedHeading(alphaDeg, betaDeg, gammaDeg) {
+      const rad = Math.PI / 180;
+      const a = alphaDeg * rad;
+      const b = (typeof betaDeg === 'number' && !isNaN(betaDeg) ? betaDeg : 0) * rad;
+      const g = (typeof gammaDeg === 'number' && !isNaN(gammaDeg) ? gammaDeg : 0) * rad;
+
+      const sinB = Math.sin(b);
+      const cosB = Math.cos(b);
+      const sinG = Math.sin(g);
+      const cosG = Math.cos(g);
+      const sinA = Math.sin(a);
+      const cosA = Math.cos(a);
+
+      // Rz(a) * Rx(b) * Ry(g) applied to horizontal forward vector (0, cos(b), -sin(b))
+      const x2 = -sinB * sinG;
+      const y2 = cosB * cosB + sinB * sinB * cosG;
+
+      const east = x2 * cosA - y2 * sinA;
+      const north = x2 * sinA + y2 * cosA;
+
+      let magHeading = (Math.atan2(east, north) * 180) / Math.PI;
+      const screenAngle = (window.screen?.orientation?.angle || window.orientation || 0);
+      magHeading = (magHeading + screenAngle + 360) % 360;
+
+      // Convert Magnetic North -> True Geographic North for Brasília, DF (-22.3° West declination)
+      // so the rotated map aligns 1:1 with Google Maps & Leaflet geographic tiles!
+      return (magHeading + BRASILIA_MAGNETIC_DECLINATION_DEG + 360) % 360;
+    }
+
+    // Smartphone Compass Listener (follows True North & exact 3D phone pointing direction like Google Maps)
     let compassListenersAttached = false;
     function startPhoneCompassTracking() {
       if (compassListenersAttached) return;
       compassListenersAttached = true;
 
-      const handleOrientation = (ev) => {
-        let heading = null;
+      const handleAbsoluteOrientation = (ev) => {
+        let trueHeading = null;
+
         if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) {
-          heading = ev.webkitCompassHeading;
-        } else if (typeof ev.alpha === 'number' && !isNaN(ev.alpha)) {
-          const screenAngle = (window.screen?.orientation?.angle || window.orientation || 0);
-          heading = (360 - ev.alpha + screenAngle) % 360;
+          // iOS Safari webkitCompassHeading already compensates for tilt & true north when GPS is active
+          trueHeading = ev.webkitCompassHeading;
+        } else if (ev.absolute === true && typeof ev.alpha === 'number' && !isNaN(ev.alpha)) {
+          // Android Chrome absolute magnetometer: apply 3D tilt compensation + Brasília -22.3° True North declination
+          trueHeading = computeTiltCompensatedHeading(ev.alpha, ev.beta, ev.gamma);
         }
-        if (heading === null) return;
+
+        // Strictly reject non-absolute (relative gyro) events so arbitrary startup zero never corrupts alignment!
+        if (trueHeading === null) return;
+
+        // Deadband tiny < 1.2° magnetometer jitter when standing still
+        if (state.nav.deviceCompassHeading !== null) {
+          const jitter = Math.abs(normalizeAngleDiff(trueHeading - state.nav.deviceCompassHeading));
+          if (jitter < 1.2) return;
+        }
 
         state.nav.deviceCompassHeading = state.nav.deviceCompassHeading === null
-          ? heading
-          : blendAngleDeg(state.nav.deviceCompassHeading, heading, 0.22);
+          ? trueHeading
+          : blendAngleDeg(state.nav.deviceCompassHeading, trueHeading, 0.24);
 
         if (state.activeTab === 'navigation') {
           updateNavPuckArrow();
@@ -4762,18 +5075,20 @@
         }
       };
 
-      // iOS 13+ permission gate (no-op on Android Chrome which grants directly)
+      // iOS 13+ permission gate (Android Chrome fires deviceorientationabsolute directly over HTTPS)
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission().then(res => {
           if (res === 'granted') {
-            window.addEventListener('deviceorientation', handleOrientation, true);
+            window.addEventListener('deviceorientation', handleAbsoluteOrientation, true);
           }
         }).catch(() => {});
       } else {
-        window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+        window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation, true);
+        // Only listen to standard event if the browser explicitly flags ev.absolute === true
         window.addEventListener('deviceorientation', (ev) => {
-          if (ev.absolute === false && state.nav.deviceCompassHeading !== null) return;
-          handleOrientation(ev);
+          if (ev.absolute === true || typeof ev.webkitCompassHeading === 'number') {
+            handleAbsoluteOrientation(ev);
+          }
         }, true);
       }
     }
@@ -5748,6 +6063,26 @@
         state.playback.progress = Number(e.target.value) / 1000;
         updatePlaybackPosition(state.playback.progress);
       });
+
+      // Komoot-Style Interactive Elevation Chart Scrubbing (click/drag/touch moves rider on map!)
+      const elevWrap = document.getElementById('elevationChartWrap');
+      if (elevWrap) {
+        const scrubElevation = (clientX) => {
+          const rect = elevWrap.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+          stopPlayback();
+          state.playback.progress = ratio;
+          updatePlaybackPosition(ratio);
+        };
+        let isScrubbingElev = false;
+        elevWrap.addEventListener('mousedown', (e) => { isScrubbingElev = true; scrubElevation(e.clientX); });
+        window.addEventListener('mousemove', (e) => { if (isScrubbingElev) scrubElevation(e.clientX); });
+        window.addEventListener('mouseup', () => { isScrubbingElev = false; });
+        elevWrap.addEventListener('touchstart', (e) => { if (e.touches[0]) scrubElevation(e.touches[0].clientX); }, { passive: true });
+        elevWrap.addEventListener('touchmove', (e) => { if (e.touches[0]) scrubElevation(e.touches[0].clientX); }, { passive: true });
+      }
+
       document.getElementById('btnGlueRoutes').addEventListener('click', () => {
         glueAllAlternativeRoutes({ silent: false });
       });
