@@ -225,6 +225,14 @@
     #map.editing-route .leaflet-overlay-pane svg path.editable-route-hit {
       cursor: pointer !important;
     }
+
+    /* Fullscreen / Immersive Handlebar Mode: hides header & expands map to 100dvh */
+    body.nav-fullscreen #appHeader {
+      display: none !important;
+    }
+    body.nav-fullscreen #viewNavigation {
+      height: 100dvh !important;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
@@ -233,12 +241,12 @@
   <input type="file" id="routePresetInput" accept=".gpx,.geojson,.json" class="hidden" />
 
   <!-- Top Sticky Header -->
-  <header class="sticky top-0 z-[1200] border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
+  <header id="appHeader" class="sticky top-0 z-[1200] border-b border-slate-800/90 bg-slate-950/95 backdrop-blur-md">
     <div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-6">
-      <div class="flex min-w-0 items-center gap-2">
+      <div class="flex shrink-0 items-center gap-2">
         <!-- Custom Brand Icon: Bike / E-Scooter split diagonally by "/" -->
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 via-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/25 ring-1 ring-white/20">
-          <svg class="h-6 w-6" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 via-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-500/25 ring-1 ring-white/20 sm:h-9 sm:w-9">
+          <svg class="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <!-- Top-Left Half: Bike -->
             <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="6.8" cy="14.5" r="2.7" />
@@ -256,7 +264,7 @@
             </g>
           </svg>
         </div>
-        <div class="min-w-0">
+        <div class="shrink-0">
           <div class="flex items-center gap-1.5">
             <h1 class="whitespace-nowrap text-sm font-extrabold tracking-tight text-white sm:text-base">
               Ciclovias<span class="text-emerald-400">DF</span>
@@ -271,17 +279,25 @@
         </div>
       </div>
 
-      <!-- Primary App Tabs (Navegação GPS Default First, Simulador Second) -->
-      <nav class="flex shrink-0 items-center rounded-xl border border-slate-800 bg-slate-900 p-1 text-xs shadow-inner">
-        <button type="button" id="tabBtnNavigation"
-          class="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 font-extrabold text-slate-950 transition sm:px-3">
-          <span>🧭</span>
-          <span>Navegação GPS</span>
+      <!-- Primary App Tabs (Compact GPS & Route Icons on Mobile so App Name Never Overlaps) -->
+      <nav class="flex shrink-0 items-center gap-1 rounded-xl border border-slate-800 bg-slate-900 p-1 text-xs shadow-inner">
+        <button type="button" id="tabBtnNavigation" title="Navegação GPS"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 font-extrabold text-slate-950 transition sm:px-3">
+          <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+          </svg>
+          <span class="sm:hidden">GPS</span>
+          <span class="hidden sm:inline">Navegação GPS</span>
         </button>
-        <button type="button" id="tabBtnSimulator"
-          class="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-bold text-slate-300 transition hover:text-white sm:px-3">
-          <span>🗺️</span>
-          <span>Simulador</span>
+        <button type="button" id="tabBtnSimulator" title="Simulador e Rotas"
+          class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-bold text-slate-300 transition hover:text-white sm:px-3">
+          <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="6" cy="19" r="2.5" />
+            <circle cx="18" cy="5" r="2.5" />
+            <path d="M8.5 19h5a3.5 3.5 0 0 0 0-7h-3a3.5 3.5 0 0 1 0-7h5" />
+          </svg>
+          <span class="sm:hidden">Rotas</span>
+          <span class="hidden sm:inline">Simulador</span>
         </button>
       </nav>
     </div>
@@ -935,20 +951,30 @@
       </div>
 
       <!-- RIGHT FLOATING HANDLEBAR CONTROLS (Clean Waze / Google Maps Controls) -->
-      <div class="absolute right-3 top-1/2 z-[1000] flex -translate-y-1/2 flex-col gap-2.5">
+      <div class="absolute right-3 top-1/2 z-[1000] flex -translate-y-1/2 flex-col gap-2 sm:gap-2.5">
+        <button type="button" id="btnNavFullscreen" title="Tela Cheia (oculta barra superior para mais espaço no mapa)"
+          class="flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-slate-200 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12">
+          <svg id="navFullscreenIconExpand" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+          <svg id="navFullscreenIconExit" class="hidden h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7" />
+          </svg>
+        </button>
+
         <button type="button" id="btnNavQuickSearch" title="Buscar destino rápido (Komoot Photon)"
-          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
+          class="flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-base text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg">
           🔍
         </button>
 
         <button type="button" id="btnNavRecenter" title="Centralizar no GPS e seguir direção"
-          class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
+          class="flex h-11 w-11 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900/95 text-base text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg">
           🎯
         </button>
 
         <button type="button" id="btnNavCompassMode" title="Bússola: Seguir direção do celular / Norte Fixo (toque para alternar)"
-          class="flex h-12 w-12 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95">
-          <svg id="navCompassNeedleSvg" class="h-6 w-6 transition-transform duration-150" viewBox="0 0 24 24" fill="none">
+          class="flex h-11 w-11 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12">
+          <svg id="navCompassNeedleSvg" class="h-5 w-5 transition-transform duration-150 sm:h-6 sm:w-6" viewBox="0 0 24 24" fill="none">
             <polygon points="12,2 16,12 12,10 8,12" fill="#f43f5e" />
             <polygon points="12,22 16,12 12,14 8,12" fill="#e2e8f0" />
             <circle cx="12" cy="12" r="1.8" fill="#0f172a" />
@@ -957,12 +983,12 @@
         </button>
 
         <button type="button" id="btnNavVoiceToggle" title="Áudio desligado (toque para ativar voz PT-BR)"
-          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-slate-400 shadow-xl backdrop-blur-md transition active:scale-95">
+          class="flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-base text-slate-400 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg">
           🔇
         </button>
 
         <button type="button" id="btnNavThemeToggle" title="Modo Sol / Noite"
-          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-amber-300 shadow-xl backdrop-blur-md transition active:scale-95">
+          class="flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-base text-amber-300 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg">
           ☀️
         </button>
       </div>
@@ -5230,12 +5256,12 @@ ${trkpts}
       if (!btn || !tag) return;
 
       if (state.nav.compassMode) {
-        btn.className = 'flex h-12 w-12 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95';
+        btn.className = 'flex h-11 w-11 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12';
         tag.textContent = state.nav.deviceCompassHeading !== null ? `${Math.round(state.nav.deviceCompassHeading)}°` : 'AUTO';
         tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-emerald-300';
       } else {
         const isNorth = Math.abs(normalizeAngleDiff(state.nav.mapBearing)) < 2;
-        btn.className = 'flex h-12 w-12 flex-col items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-white shadow-xl backdrop-blur-md transition active:scale-95';
+        btn.className = 'flex h-11 w-11 flex-col items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-white shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12';
         tag.textContent = isNorth ? 'NORTE' : 'LIVRE';
         tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-slate-300';
       }
@@ -5773,9 +5799,9 @@ ${trkpts}
       const btn = document.getElementById('btnNavRecenter');
       if (!btn) return;
       if (state.nav.followGps) {
-        btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-sky-500/25 text-lg text-sky-200 shadow-xl backdrop-blur-md transition active:scale-95';
+        btn.className = 'flex h-11 w-11 items-center justify-center rounded-full border-2 border-sky-400 bg-sky-500/25 text-base text-sky-200 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg';
       } else {
-        btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-lg text-slate-300 shadow-xl backdrop-blur-md transition active:scale-95';
+        btn.className = 'flex h-11 w-11 items-center justify-center rounded-full border border-slate-600 bg-slate-900/95 text-base text-slate-300 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg';
       }
     }
 
@@ -5785,12 +5811,67 @@ ${trkpts}
       if (state.nav.voiceEnabled) {
         btn.textContent = '🔊';
         btn.title = 'Instruções por voz ativadas (toque para silenciar)';
-        btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-lg text-emerald-200 shadow-xl backdrop-blur-md transition active:scale-95';
+        btn.className = 'flex h-11 w-11 items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-base text-emerald-200 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg';
       } else {
         btn.textContent = '🔇';
         btn.title = 'Áudio desligado (toque para ativar voz PT-BR)';
-        btn.className = 'flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-slate-400 shadow-xl backdrop-blur-md transition active:scale-95';
+        btn.className = 'flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-base text-slate-400 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12 sm:text-lg';
       }
+    }
+
+    // Fullscreen / Immersive Handlebar Mode (uses native Android Fullscreen API + CSS immersive fallback)
+    function updateFullscreenBtnVisual(isFullscreen) {
+      const btn = document.getElementById('btnNavFullscreen');
+      const expandIcon = document.getElementById('navFullscreenIconExpand');
+      const exitIcon = document.getElementById('navFullscreenIconExit');
+      if (!btn) return;
+
+      if (isFullscreen) {
+        btn.className = 'flex h-11 w-11 items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/25 text-emerald-200 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12';
+        btn.title = 'Sair da Tela Cheia';
+        if (expandIcon) expandIcon.classList.add('hidden');
+        if (exitIcon) exitIcon.classList.remove('hidden');
+      } else {
+        btn.className = 'flex h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-slate-200 shadow-xl backdrop-blur-md transition active:scale-95 sm:h-12 sm:w-12';
+        btn.title = 'Tela Cheia (oculta barra superior para mais espaço no mapa)';
+        if (expandIcon) expandIcon.classList.remove('hidden');
+        if (exitIcon) exitIcon.classList.add('hidden');
+      }
+    }
+
+    async function toggleNavFullscreen(forceState = null) {
+      const currentlyFull = document.body.classList.contains('nav-fullscreen') || Boolean(document.fullscreenElement);
+      const wantFull = forceState !== null ? forceState : !currentlyFull;
+
+      if (wantFull) {
+        document.body.classList.add('nav-fullscreen');
+        updateFullscreenBtnVisual(true);
+        const docEl = document.documentElement;
+        if (!document.fullscreenElement && docEl) {
+          try {
+            if (docEl.requestFullscreen) await docEl.requestFullscreen();
+            else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+          } catch (e) {}
+        }
+      } else {
+        document.body.classList.remove('nav-fullscreen');
+        updateFullscreenBtnVisual(false);
+        if (document.fullscreenElement) {
+          try {
+            if (document.exitFullscreen) await document.exitFullscreen();
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          } catch (e) {}
+        }
+      }
+
+      setTimeout(() => {
+        sizeNavRotatorContainer();
+        if (navMap) navMap.invalidateSize({ animate: false });
+      }, 80);
+      setTimeout(() => {
+        sizeNavRotatorContainer();
+        if (navMap) navMap.invalidateSize({ animate: false });
+      }, 280);
     }
 
     function handleNavigationPositionUpdate(lat, lng, speedMs, headingDeg, accuracyM) {
@@ -6155,8 +6236,8 @@ ${trkpts}
       if (tabName === 'navigation') {
         viewNav.classList.remove('hidden');
         viewSim.classList.add('hidden');
-        btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950 transition';
-        btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
+        btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-2.5 py-1.5 font-extrabold text-slate-950 transition sm:px-3';
+        btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-bold text-slate-300 transition hover:text-white sm:px-3';
 
         // Start phone compass immediately on Android/HTTPS so the map & blue beam respond right away
         startPhoneCompassTracking();
@@ -6168,10 +6249,13 @@ ${trkpts}
           refreshNavigationRouteLayer();
         }, 40);
       } else {
+        if (document.body.classList.contains('nav-fullscreen')) {
+          toggleNavFullscreen(false);
+        }
         viewSim.classList.remove('hidden');
         viewNav.classList.add('hidden');
-        btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 font-extrabold text-slate-950 transition';
-        btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
+        btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg bg-sky-500 px-2.5 py-1.5 font-extrabold text-slate-950 transition sm:px-3';
+        btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-bold text-slate-300 transition hover:text-white sm:px-3';
 
         setTimeout(() => {
           if (map) map.invalidateSize();
@@ -6473,6 +6557,18 @@ ${trkpts}
       });
 
       // Live GPS Navigation Controls
+      document.getElementById('btnNavFullscreen').addEventListener('click', () => toggleNavFullscreen());
+      document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && document.body.classList.contains('nav-fullscreen')) {
+          document.body.classList.remove('nav-fullscreen');
+          updateFullscreenBtnVisual(false);
+          setTimeout(() => {
+            sizeNavRotatorContainer();
+            if (navMap) navMap.invalidateSize({ animate: false });
+          }, 100);
+        }
+      });
+
       document.getElementById('btnNavStartStopGps').addEventListener('click', startLiveGpsNavigation);
       document.getElementById('btnNavDemoSim').addEventListener('click', toggleNavDemoMode);
 
