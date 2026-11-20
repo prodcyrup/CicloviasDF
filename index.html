@@ -335,12 +335,15 @@
           </datalist>
 
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-12">
-            <!-- Origin Input -->
+            <!-- Origin Input (Komoot Photon Live Autocomplete) -->
             <div class="relative flex items-center gap-1.5 sm:col-span-5">
               <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 font-mono text-xs font-extrabold text-emerald-400">A</span>
-              <input type="text" id="planOriginInput" list="bsbPlacesList"
-                placeholder="Origem (ex: Câmara, SQN 206...)"
-                class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+              <div class="relative min-w-0 flex-1">
+                <input type="text" id="planOriginInput" autocomplete="off"
+                  placeholder="Origem (ex: Câmara, SQN 206...)"
+                  class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+                <div id="planOriginSuggestions" class="absolute left-0 right-0 top-full z-[1100] mt-1 hidden max-h-60 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950/98 p-1 shadow-2xl backdrop-blur-md"></div>
+              </div>
               <button type="button" id="btnUseGpsOrigin" title="Usar minha localização GPS"
                 class="shrink-0 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-sky-400 transition hover:border-sky-500 hover:bg-sky-500/10">
                 🛰️
@@ -359,12 +362,15 @@
               </button>
             </div>
 
-            <!-- Destination Input -->
+            <!-- Destination Input (Komoot Photon Live Autocomplete) -->
             <div class="relative flex items-center gap-1.5 sm:col-span-6">
               <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/20 font-mono text-xs font-extrabold text-purple-400">B</span>
-              <input type="text" id="planDestInput" list="bsbPlacesList"
-                placeholder="Destino (ex: 711 Norte, UnB, Parque...)"
-                class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none" />
+              <div class="relative min-w-0 flex-1">
+                <input type="text" id="planDestInput" autocomplete="off"
+                  placeholder="Destino (ex: 711 Norte, UnB, Parque...)"
+                  class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none" />
+                <div id="planDestSuggestions" class="absolute left-0 right-0 top-full z-[1100] mt-1 hidden max-h-60 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950/98 p-1 shadow-2xl backdrop-blur-md"></div>
+              </div>
               <button type="button" id="btnPickDestMap" title="Marcar Destino no Mapa"
                 class="shrink-0 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-purple-400 transition hover:border-purple-500 hover:bg-purple-500/10">
                 📍
@@ -910,10 +916,31 @@
             <div id="navCrossingSubtext" class="truncate text-[10px] text-rose-200/85">Reduza a velocidade e atenção aos carros.</div>
           </div>
         </div>
+
+        <!-- Quick Destination Search Overlay (Powered by Komoot Photon) -->
+        <div id="navQuickSearchBox" class="pointer-events-auto mt-2 hidden rounded-2xl border border-sky-400/50 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-lg">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-sky-400">🔍</span>
+            <input type="text" id="navQuickSearchInput" autocomplete="off"
+              placeholder="Ir para... (ex: UnB, SQN 308, Parque da Cidade)"
+              class="min-w-0 flex-1 bg-transparent text-xs font-semibold text-white placeholder-slate-400 focus:outline-none" />
+            <button type="button" id="btnCloseNavSearch" class="rounded-lg bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-300 hover:text-white">✕</button>
+          </div>
+          <div id="navQuickSearchResults" class="mt-1.5 hidden max-h-56 overflow-y-auto border-t border-slate-800 pt-1.5"></div>
+          <div class="mt-1.5 flex items-center justify-between text-[10px] text-slate-500">
+            <span>Busca rápida DF • Komoot Photon</span>
+            <span>Rota segura nas ciclovias</span>
+          </div>
+        </div>
       </div>
 
       <!-- RIGHT FLOATING HANDLEBAR CONTROLS (Clean Waze / Google Maps Controls) -->
       <div class="absolute right-3 top-1/2 z-[1000] flex -translate-y-1/2 flex-col gap-2.5">
+        <button type="button" id="btnNavQuickSearch" title="Buscar destino rápido (Komoot Photon)"
+          class="flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
+          🔍
+        </button>
+
         <button type="button" id="btnNavRecenter" title="Centralizar no GPS e seguir direção"
           class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-slate-900/95 text-lg text-sky-300 shadow-xl backdrop-blur-md transition active:scale-95">
           🎯
@@ -1573,7 +1600,8 @@
         headingUp: true, // Auto-follow phone compass / travel direction
         compassMode: true, // Rotates map automatically with phone compass or GPS heading
         mapBearing: 0, // Current map rotation angle in degrees clockwise (0 = North up)
-        deviceCompassHeading: null, // Live smartphone compass heading (0..360 deg)
+        deviceCompassHeading: null, // Live smartphone compass heading (0..360 deg True North)
+        compassSource: null, // 'sensor-api' | 'abs-event' | 'ios' | 'rel-event'
         voiceEnabled: false, // OFF by default per user preference
         lightTheme: false,
         currentPos: null,
@@ -3020,49 +3048,48 @@
           <div class="${keepUpright ? 'nav-upright-marker ' : ''}relative flex flex-col items-center">
             <div class="relative flex items-center justify-center" style="width:${sz}px;height:${sz}px;">
               <span class="danger-crossing-pulse absolute inset-0 rounded-full ${haloClass}"></span>
-              <svg viewBox="0 0 36 34" class="relative h-full w-full drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)]">
-                <path d="M18 2 L34 31 L2 31 Z" fill="${fillHex}" stroke="${strokeHex}" stroke-width="2.6" stroke-linejoin="round" />
-                <rect x="16.4" y="11" width="3.2" height="10.5" rx="1.5" fill="#ffffff" />
-                <circle cx="18" cy="25.5" r="2.1" fill="#ffffff" />
+              <svg width="${sz}" height="${sz}" viewBox="0 0 36 36" fill="none" class="relative drop-shadow-[0_3px_8px_rgba(0,0,0,0.85)]">
+                <path d="M18 3 L33 30 H3 Z" fill="${fillHex}" stroke="${strokeHex}" stroke-width="2.6" stroke-linejoin="round" />
+                <rect x="16.4" y="12.5" width="3.2" height="9" rx="1.6" fill="#ffffff" />
+                <circle cx="18" cy="25.5" r="2" fill="#ffffff" />
               </svg>
             </div>
-            ${pt.shortTag ? `<span class="-mt-1 rounded border px-1 py-0 text-[8px] font-black leading-tight tracking-wide shadow-md whitespace-nowrap ${pillClass}">${pt.shortTag}</span>` : ''}
+            <span class="-mt-1 rounded border ${pillClass} px-1.5 py-0.2 font-mono text-[9px] font-black uppercase leading-tight tracking-tight shadow-lg whitespace-nowrap">
+              ${pt.shortTag || 'VIA'}
+            </span>
           </div>
         `,
-        iconSize: [sz, sz + 11],
-        iconAnchor: [sz / 2, sz / 2]
+        iconSize: [sz + 14, sz + 14],
+        iconAnchor: [(sz + 14) / 2, sz / 2]
       });
     }
 
-    function renderStaticOverlays() {
+    function renderSlowdownMarkers(coords) {
       if (!slowdownLayerGroup) return;
       slowdownLayerGroup.clearLayers();
+      const crossings = detectRouteSlowdowns(coords);
 
-      const route = getActiveRouteObject();
-      if (!route || !Array.isArray(route.coords)) return;
-
-      // Smartly render danger markers ONLY at exact perpendicular arterial crossings of the active route
-      const activeCrossings = detectRouteSlowdowns(route.coords);
-      activeCrossings.forEach(pt => {
+      crossings.forEach(pt => {
         L.circle(pt.coords, {
           radius: 32,
           color: '#f43f5e',
           fillColor: '#ef4444',
-          fillOpacity: 0.24,
-          weight: 1.6,
+          fillOpacity: 0.22,
+          weight: 1.8,
           dashArray: '4, 4',
           interactive: false
         }).addTo(slowdownLayerGroup);
 
-        const icon = createDangerCrossingIcon(pt, false, false);
-        L.marker(pt.coords, { icon, zIndexOffset: 650 })
+        L.marker(pt.coords, {
+          icon: createDangerCrossingIcon(pt, false, false),
+          zIndexOffset: 950
+        })
           .bindPopup(`
-            <div class="p-1 max-w-[240px]">
-              <div class="inline-flex items-center gap-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-rose-300">
-                ⚠️ Travessia Perpendicular (${pt.angleDeg}°) • +${pt.delaySec}s
-              </div>
-              <div class="mt-1 text-xs font-extrabold text-white">${pt.name}</div>
+            <div class="max-w-[240px] p-1">
+              <div class="text-[10px] font-black uppercase tracking-wider text-rose-400">⚠️ Travessia Perigosa (${pt.angleDeg}°)</div>
+              <div class="mt-0.5 text-xs font-extrabold text-white">${pt.name}</div>
               <p class="mt-1 text-[11px] leading-relaxed text-slate-300">${pt.note}</p>
+              <div class="mt-1.5 font-mono text-[10px] font-bold text-amber-300">Desaceleração estimada: +${pt.delaySec}s</div>
             </div>
           `)
           .addTo(slowdownLayerGroup);
@@ -3070,35 +3097,32 @@
     }
 
     function drawSelectedRouteOnMap() {
-      if (!activeRouteLayerGroup) return;
+      if (!map || !activeRouteLayerGroup) return;
       activeRouteLayerGroup.clearLayers();
 
       const route = getActiveRouteObject();
       if (!route || !Array.isArray(route.coords) || route.coords.length < 2) return;
 
-      // Refresh exact perpendicular crossing markers for the active route
-      renderStaticOverlays();
-
-      // Subtle glowing outer halo + crisp bright blue main line
+      // White outer casing + vivid Waze/Google Maps blue path
       L.polyline(route.coords, {
-        color: '#0284c7',
+        color: '#ffffff',
         weight: 10,
-        opacity: 0.35,
+        opacity: 0.85,
         lineCap: 'round',
         lineJoin: 'round',
         interactive: false
       }).addTo(activeRouteLayerGroup);
 
-      const mainLine = L.polyline(route.coords, {
-        color: '#38bdf8',
-        weight: 5.5,
+      L.polyline(route.coords, {
+        color: '#0ea5e9',
+        weight: 6.2,
         opacity: 0.98,
         lineCap: 'round',
         lineJoin: 'round',
-        className: state.routeEditor.isEditing ? 'editable-route-hit' : ''
+        interactive: false
       }).addTo(activeRouteLayerGroup);
 
-      // Google Maps-style: click/tap anywhere on the blue route while in Edit Mode to insert a draggable point!
+      // In Google Maps-style Route Edit Mode, allow clicking anywhere on the blue line to add a new waypoint
       if (state.routeEditor.isEditing) {
         const hitLine = L.polyline(route.coords, {
           color: '#38bdf8',
@@ -3106,58 +3130,57 @@
           opacity: 0.01,
           className: 'editable-route-hit'
         }).addTo(activeRouteLayerGroup);
-
-        const onRouteLineClick = (ev) => {
-          if (!state.routeEditor.isEditing) return;
+        hitLine.on('click', (ev) => {
           L.DomEvent.stopPropagation(ev);
           insertEditableWaypointAtLatLng(ev.latlng.lat, ev.latlng.lng);
-        };
-        mainLine.on('click', onRouteLineClick);
-        hitLine.on('click', onRouteLineClick);
+        });
       }
 
-      const startPt = route.coords[0];
-      const endPt = route.coords[route.coords.length - 1];
-
+      // Origin & Destination Flags (hidden when edit handles A/B are shown)
       if (!state.routeEditor.isEditing) {
+        const startPt = route.coords[0];
+        const endPt = route.coords[route.coords.length - 1];
+        const destName = route.destLabel || DESTINATIONS[state.destinationKey].label;
+
         const startIcon = L.divIcon({
-          className: 'route-start-badge',
-          html: `<div class="rounded-full border-2 border-white bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">Partida</div>`,
-          iconSize: [60, 20],
-          iconAnchor: [30, 24]
+          className: 'start-pin',
+          html: `<div class="rounded-full border-2 border-white bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">Saída (A)</div>`,
+          iconSize: [74, 22],
+          iconAnchor: [37, 26]
         });
-        L.marker(startPt, { icon: startIcon }).addTo(activeRouteLayerGroup);
+        L.marker(startPt, { icon: startIcon, interactive: false }).addTo(activeRouteLayerGroup);
 
         const endIcon = L.divIcon({
-          className: 'route-end-badge',
-          html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">${route.destLabel || DESTINATIONS[state.destinationKey].label}</div>`,
-          iconSize: [120, 20],
+          className: 'end-pin',
+          html: `<div class="rounded-full border-2 border-white bg-purple-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xl whitespace-nowrap">🏁 ${destName}</div>`,
+          iconSize: [120, 22],
           iconAnchor: [60, -4]
         });
-        L.marker(endPt, { icon: endIcon }).addTo(activeRouteLayerGroup);
-
-        const riderIcon = L.divIcon({
-          className: 'rider-marker',
-          html: `<div class="rider-pulse flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-400 shadow-lg">
-                   <div class="h-2 w-2 rounded-full bg-slate-950"></div>
-                 </div>`,
-          iconSize: [20, 20],
-          iconAnchor: [10, 10]
-        });
-        riderMarker = L.marker(interpolateCoord(route.coords, state.playback.progress), {
-          icon: riderIcon,
-          zIndexOffset: 1000
-        }).addTo(activeRouteLayerGroup);
+        L.marker(endPt, { icon: endIcon, interactive: false }).addTo(activeRouteLayerGroup);
       }
+
+      // Animated Rider Marker for Playback
+      const riderPos = interpolateCoord(route.coords, state.playback.progress);
+      const riderIcon = L.divIcon({
+        className: 'rider-marker',
+        html: `<div class="rider-pulse flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-sky-400 shadow-lg">
+                <div class="h-2 w-2 rounded-full bg-slate-950"></div>
+               </div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+      riderMarker = L.marker(riderPos, { icon: riderIcon, zIndexOffset: 1000, interactive: false }).addTo(activeRouteLayerGroup);
+
+      // Update exact perpendicular arterial crossing warnings
+      renderSlowdownMarkers(route.coords);
     }
 
     function initMap() {
       map = L.map('map', {
-        center: [-15.7785, -47.8820],
+        center: [-15.7785, -47.8825],
         zoom: 13,
         zoomControl: true,
-        preferCanvas: true,
-        tap: false
+        preferCanvas: true
       });
 
       applyBasemapMode(state.activeBasemap);
@@ -3170,88 +3193,295 @@
       routeEditLayerGroup = L.layerGroup().addTo(map);
 
       renderDefaultCiclomapaLayer();
-      renderStaticOverlays();
       drawSelectedRouteOnMap();
 
-      // Map events for Pick-Point (A->B Planner) & Custom Route Drawing
       map.on('click', (e) => {
         if (state.planner.pickingTarget) {
           handleMapClickPickPlanner(e);
-          return;
-        }
-        if (state.isDrawing) {
+        } else if (state.isDrawing) {
           handleMapClickDraw(e);
         }
       });
 
-      map.on('mousemove', (e) => {
-        if (state.isDrawing) {
-          handleMapMouseMoveDraw(e);
-        }
-      });
+      map.on('mousemove', handleMapMouseMoveDraw);
     }
 
     // =========================================================================
     // 8B. SMART A -> B ROUTE PLANNER (CICLOVIAS + WIDE PAVED SIDEWALKS)
     // =========================================================================
     const BSB_KNOWN_PLACES = [
-      { keys: ['camara', 'câmara', 'congresso', 'tres poderes', 'três poderes'], coords: [-15.799000, -47.862554] },
-      { keys: ['711 norte', 'shcgn 711', '711n'], coords: [-15.756483, -47.895700] },
-      { keys: ['912 norte', 'sgan 912', 'masterplace', '912n'], coords: [-15.752400, -47.899200] },
-      { keys: ['rodoviaria', 'rodoviária', 'plano piloto'], coords: [-15.793400, -47.882900] },
-      { keys: ['parque da cidade', 'sarah kubitschek'], coords: [-15.800700, -47.907000] },
-      { keys: ['unb', 'darcy ribeiro', 'universidade de brasilia'], coords: [-15.763400, -47.870600] },
-      { keys: ['uniceub', 'ceub', '707/907', '707 norte'], coords: [-15.767600, -47.894400] },
-      { keys: ['olhos d agua', "olhos d'agua", "olhos d'água", 'parque olhos'], coords: [-15.744300, -47.886100] },
-      { keys: ['conjunto nacional'], coords: [-15.791500, -47.882700] },
-      { keys: ['brasilia shopping', 'brasília shopping'], coords: [-15.786700, -47.888800] },
-      { keys: ['torre de tv'], coords: [-15.790500, -47.892800] },
-      { keys: ['pontao', 'pontão', 'lago sul'], coords: [-15.826600, -47.872500] },
-      { keys: ['esplanada', 'ministerios', 'ministérios'], coords: [-15.797500, -47.872200] },
-      { keys: ['sqn 308', '308 norte'], coords: [-15.766200, -47.889100] },
-      { keys: ['sqs 308', '308 sul'], coords: [-15.816500, -47.903800] }
+      { keys: ['câmara dos deputados', 'camara', 'congresso', 'três poderes', 'tres poderes'], coords: [-15.798967, -47.862638] },
+      { keys: ['shcgn 711 norte', '711 norte', '711n'], coords: [-15.756582, -47.895675] },
+      { keys: ['sgan 912 norte', '912 norte', '912n', 'masterplace'], coords: [-15.7524, -47.8992] },
+      { keys: ['rodoviária do plano piloto', 'rodoviaria', 'plataforma'], coords: [-15.7934, -47.8828] },
+      { keys: ['parque da cidade', 'sarah kubitschek'], coords: [-15.8005, -47.9112] },
+      { keys: ['unb', 'darcy ribeiro', 'universidade de brasília'], coords: [-15.7634, -47.8705] },
+      { keys: ['uniceub', 'ceub', '707/907 norte'], coords: [-15.7678, -47.8942] },
+      { keys: ['parque olhos d\'água', 'olhos dagua', '413/414 norte'], coords: [-15.7445, -47.8855] },
+      { keys: ['shopping conjunto nacional', 'conjunto nacional'], coords: [-15.7915, -47.8825] },
+      { keys: ['brasília shopping', 'brasilia shopping'], coords: [-15.7865, -47.8888] },
+      { keys: ['torre de tv', 'feira da torre'], coords: [-15.7906, -47.8929] },
+      { keys: ['pontão do lago sul', 'pontao'], coords: [-15.8266, -47.8722] },
+      { keys: ['esplanada dos ministérios', 'esplanada'], coords: [-15.7966, -47.8725] },
+      { keys: ['sqn 308 norte', '308 norte'], coords: [-15.7675, -47.8895] },
+      { keys: ['sqs 308 sul', '308 sul'], coords: [-15.8185, -47.9022] }
     ];
 
     function setPlannerPickMode(target) {
-      if (target && state.isDrawing) toggleCustomDrawMode(false);
-      if (target && state.routeEditor.isEditing) toggleRouteEditMode(false);
       state.planner.pickingTarget = target;
-
       const mapEl = document.getElementById('map');
       const banner = document.getElementById('planPickBanner');
       const txt = document.getElementById('planPickBannerText');
 
       if (target) {
-        mapEl.classList.add('picking-point');
-        banner.classList.remove('hidden');
-        banner.classList.add('flex');
-        txt.textContent = target === 'origin'
-          ? 'Clique no mapa abaixo para marcar a Origem (A)...'
-          : 'Clique no mapa abaixo para marcar o Destino (B)...';
+        if (state.isDrawing) toggleCustomDrawMode(false);
+        if (state.routeEditor.isEditing) toggleRouteEditMode(false);
+        if (mapEl) mapEl.classList.add('picking-point');
+        if (banner) {
+          banner.classList.remove('hidden');
+          banner.classList.add('flex');
+        }
+        if (txt) {
+          txt.textContent = target === 'origin'
+            ? 'Clique no mapa abaixo para marcar a Origem (A)...'
+            : 'Clique no mapa abaixo para marcar o Destino (B)...';
+        }
       } else {
-        mapEl.classList.remove('picking-point');
-        banner.classList.add('hidden');
-        banner.classList.remove('flex');
+        if (mapEl) mapEl.classList.remove('picking-point');
+        if (banner) {
+          banner.classList.add('hidden');
+          banner.classList.remove('flex');
+        }
       }
     }
 
-    function handleMapClickPickPlanner(e) {
+    async function handleMapClickPickPlanner(e) {
       const target = state.planner.pickingTarget;
       if (!target) return;
 
       const pt = [+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)];
-      const label = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
+      const fallbackLabel = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
+      const inputEl = document.getElementById(target === 'origin' ? 'planOriginInput' : 'planDestInput');
 
       if (target === 'origin') {
         state.planner.originCoords = pt;
-        document.getElementById('planOriginInput').value = label;
-        showToast('Origem (A) Marcada', 'Agora escolha o Destino (B) e clique em Calcular.');
+        inputEl.value = fallbackLabel;
+        showToast('Origem (A) Marcada', 'Identificando endereço via Komoot Photon...');
       } else {
         state.planner.destCoords = pt;
-        document.getElementById('planDestInput').value = label;
-        showToast('Destino (B) Marcado', 'Clique em Calcular para traçar a rota segura.');
+        inputEl.value = fallbackLabel;
+        showToast('Destino (B) Marcado', 'Identificando endereço via Komoot Photon...');
       }
       setPlannerPickMode(null);
+
+      // Reverse-geocode picked point with Komoot Photon so real Brasília street/quadra name appears
+      const prettyName = await photonReverseGeocode(pt[0], pt[1]);
+      if (prettyName && inputEl && inputEl.value === fallbackLabel) {
+        inputEl.value = prettyName;
+      }
+    }
+
+    // =========================================================================
+    // 8B-PHOTON. KOMOOT PHOTON GEOCODER (INSTANT AUTOCOMPLETE & REVERSE GEOCODE)
+    // =========================================================================
+    function formatPhotonFeature(feat) {
+      const p = feat?.properties || {};
+      const coords = feat?.geometry?.coordinates;
+      if (!Array.isArray(coords) || coords.length < 2) return null;
+
+      const main = p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || p.district || p.city || 'Local em Brasília';
+      const subParts = [];
+      if (p.street && p.street !== main) subParts.push(p.street);
+      if (p.district && p.district !== main) subParts.push(p.district);
+      else if (p.locality && p.locality !== main) subParts.push(p.locality);
+      if (p.city && p.city !== main) subParts.push(p.city);
+      if (p.state && !subParts.includes(p.state)) subParts.push(p.state);
+
+      let icon = '📍';
+      const osmKey = p.osm_key || '';
+      const osmVal = p.osm_value || '';
+      if (osmKey === 'leisure' || osmVal === 'park') icon = '🌳';
+      else if (osmKey === 'amenity' && (osmVal === 'university' || osmVal === 'school' || osmVal === 'college')) icon = '🎓';
+      else if (osmKey === 'amenity' && osmVal === 'hospital') icon = '🏥';
+      else if (osmKey === 'shop' || osmVal === 'mall') icon = '🛍️';
+      else if (osmKey === 'highway') icon = '🛣️';
+      else if (osmKey === 'public_transport' || osmVal === 'bus_station' || osmVal === 'subway') icon = '🚇';
+
+      return {
+        label: main,
+        subtitle: subParts.slice(0, 3).join(' • ') || 'Brasília • DF',
+        fullText: subParts.length > 0 ? `${main}, ${subParts[0]}` : main,
+        coords: [+coords[1].toFixed(6), +coords[0].toFixed(6)],
+        icon
+      };
+    }
+
+    async function photonAutocompleteBrasilia(query, limit = 6) {
+      const q = (query || '').trim();
+      if (q.length < 2) return [];
+
+      // 1. Instant local Brasília matches (zero latency)
+      const norm = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const localMatches = BSB_KNOWN_PLACES
+        .filter(p => p.keys.some(k => k.normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(norm)))
+        .slice(0, 3)
+        .map(p => ({
+          label: p.keys[0].replace(/\b\w/g, ch => ch.toUpperCase()),
+          subtitle: 'Referência rápida • Brasília DF',
+          fullText: `${p.keys[0].replace(/\b\w/g, ch => ch.toUpperCase())}, Brasília`,
+          coords: p.coords,
+          icon: '⭐'
+        }));
+
+      // 2. Live Komoot Photon API biased to Plano Piloto / DF bounding box
+      try {
+        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lat=-15.7939&lon=-47.8828&bbox=-48.28,-16.05,-47.35,-15.50&location_bias_scale=0.35&limit=${limit}`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) return localMatches;
+        const json = await res.json();
+        const remote = (json?.features || []).map(formatPhotonFeature).filter(Boolean);
+
+        // Merge local + Photon without duplicates within 120m
+        const merged = [...localMatches];
+        for (const r of remote) {
+          const dup = merged.some(m => haversineMeters(m.coords[0], m.coords[1], r.coords[0], r.coords[1]) < 120);
+          if (!dup) merged.push(r);
+        }
+        return merged.slice(0, limit);
+      } catch (e) {
+        return localMatches;
+      }
+    }
+
+    async function photonReverseGeocode(lat, lng) {
+      try {
+        const url = `https://photon.komoot.io/reverse?lat=${lat.toFixed(6)}&lon=${lng.toFixed(6)}&limit=1`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) return null;
+        const json = await res.json();
+        const feat = json?.features?.[0];
+        const parsed = feat ? formatPhotonFeature(feat) : null;
+        return parsed ? parsed.fullText : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function attachPhotonAutocomplete(inputId, dropdownId, onSelectItem) {
+      const inputEl = document.getElementById(inputId);
+      const dropEl = document.getElementById(dropdownId);
+      if (!inputEl || !dropEl) return;
+
+      let debounceTimer = null;
+      let latestQuery = '';
+
+      const hideDropdown = () => {
+        dropEl.classList.add('hidden');
+      };
+
+      const renderItems = (items) => {
+        if (!items || items.length === 0) {
+          hideDropdown();
+          return;
+        }
+        dropEl.innerHTML = items.map((item, i) => `
+          <button type="button" data-photon-idx="${i}"
+            class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition hover:bg-slate-800/90 active:bg-sky-500/20">
+            <span class="shrink-0 text-sm">${item.icon}</span>
+            <div class="min-w-0 flex-1">
+              <div class="truncate font-bold text-white">${item.label}</div>
+              <div class="truncate text-[10px] text-slate-400">${item.subtitle}</div>
+            </div>
+          </button>
+        `).join('');
+        dropEl.classList.remove('hidden');
+
+        dropEl.querySelectorAll('[data-photon-idx]').forEach(btn => {
+          btn.addEventListener('mousedown', (ev) => {
+            ev.preventDefault(); // Prevent blur before click fires
+            const chosen = items[Number(btn.dataset.photonIdx)];
+            if (chosen) {
+              inputEl.value = chosen.fullText;
+              hideDropdown();
+              onSelectItem(chosen);
+            }
+          });
+        });
+      };
+
+      inputEl.addEventListener('input', () => {
+        const val = inputEl.value.trim();
+        latestQuery = val;
+        clearTimeout(debounceTimer);
+        if (val.length < 2) {
+          hideDropdown();
+          return;
+        }
+        debounceTimer = setTimeout(async () => {
+          const results = await photonAutocompleteBrasilia(val, 6);
+          if (latestQuery === val) renderItems(results);
+        }, 240);
+      });
+
+      inputEl.addEventListener('blur', () => {
+        setTimeout(hideDropdown, 180);
+      });
+    }
+
+    async function launchQuickNavToDestination(destItem) {
+      const searchBox = document.getElementById('navQuickSearchBox');
+      if (searchBox) searchBox.classList.add('hidden');
+
+      showToast('Calculando Rota Segura...', `Traçando caminho nas ciclovias até ${destItem.label}...`);
+
+      // Use live GPS position if available, else current route start (Câmara / Três Poderes)
+      let startPt = state.nav.currentPos;
+      if (!startPt && 'geolocation' in navigator) {
+        startPt = await new Promise(resolve => {
+          navigator.geolocation.getCurrentPosition(
+            p => resolve([+p.coords.latitude.toFixed(6), +p.coords.longitude.toFixed(6)]),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 4500, maximumAge: 15000 }
+          );
+        });
+      }
+      if (!startPt) startPt = OFFICIAL_LEAFLET_COORDS[0];
+
+      const best = await computeSmartLeg(startPt, destItem.coords, 'safe');
+      if (!best || !best.coords || best.coords.length < 2) {
+        showToast('Erro no Cálculo', 'Não foi possível traçar rota até este destino agora.');
+        return;
+      }
+
+      const shortDest = destItem.label.slice(0, 22);
+      state.plannedRoute = {
+        id: 'rota-planejada-ab',
+        shortTitle: `🧭 Ir para ${shortDest}`,
+        tag: best.sourceTag === 'ciclomapa-graph' ? 'Malha CicloMapa' : 'Ciclovia + Calçada',
+        isPlanned: true,
+        isOfficial: false,
+        destLabel: shortDest,
+        distanceKm: best.distanceKm,
+        description: `Navegação rápida até ${destItem.fullText} (${best.cyclePct}% em ciclovias reais do CicloMapa DF).`,
+        coords: best.coords
+      };
+      state.selectedRouteId = state.plannedRoute.id;
+      state.nav.reversed = false;
+      state.nav.lastSpokenKey = '';
+
+      drawSelectedRouteOnMap();
+      recalculateAll();
+      refreshNavigationRouteLayer();
+      if (navMap && !state.nav.isTracking) {
+        navMap.fitBounds(L.latLngBounds(best.coords), { padding: [110, 120] });
+      }
+      showToast('Destino Pronto!', `${best.distanceKm.toFixed(2).replace('.', ',')} km (${best.cyclePct}% ciclovia real) até ${shortDest}.`);
     }
 
     async function resolvePlaceToCoords(queryText, cachedCoords = null) {
@@ -3263,6 +3493,10 @@
         return [parseFloat(coordMatch[1]), parseFloat(coordMatch[2])];
       }
 
+      if (cachedCoords) {
+        return cachedCoords;
+      }
+
       const norm = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       for (const p of BSB_KNOWN_PLACES) {
         if (p.keys.some(k => norm.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
@@ -3270,10 +3504,13 @@
         }
       }
 
-      if (cachedCoords && raw.startsWith('Mapa (')) {
-        return cachedCoords;
+      // Primary geocoder: Komoot Photon (typo-tolerant, Brasília-biased)
+      const photonHits = await photonAutocompleteBrasilia(raw, 1);
+      if (photonHits.length > 0) {
+        return photonHits[0].coords;
       }
 
+      // Fallback geocoder: OSM Nominatim
       try {
         const q = norm.includes('brasilia') || norm.includes('distrito federal') ? raw : `${raw}, Brasília, DF, Brasil`;
         const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&viewbox=-48.28,-15.50,-47.35,-16.05&bounded=1&q=${encodeURIComponent(q)}`;
@@ -4981,7 +5218,7 @@ ${trkpts}
     function updateNavPuckArrow() {
       const arrow = document.getElementById('navGpsArrowInner');
       if (!arrow) return;
-      const activeHeading = (state.nav.currentSpeedKmh < 6 && state.nav.deviceCompassHeading !== null && !state.nav.isDemoMode)
+      const activeHeading = (state.nav.currentSpeedKmh < 9 && state.nav.deviceCompassHeading !== null && !state.nav.isDemoMode)
         ? state.nav.deviceCompassHeading
         : state.nav.currentHeading;
       arrow.style.transform = `rotate(${(activeHeading || 0).toFixed(1)}deg)`;
@@ -4994,7 +5231,7 @@ ${trkpts}
 
       if (state.nav.compassMode) {
         btn.className = 'flex h-12 w-12 flex-col items-center justify-center rounded-full border-2 border-emerald-400 bg-emerald-500/20 text-white shadow-xl backdrop-blur-md transition active:scale-95';
-        tag.textContent = 'AUTO';
+        tag.textContent = state.nav.deviceCompassHeading !== null ? `${Math.round(state.nav.deviceCompassHeading)}°` : 'AUTO';
         tag.className = 'text-[8px] font-black uppercase leading-none tracking-tight text-emerald-300';
       } else {
         const isNorth = Math.abs(normalizeAngleDiff(state.nav.mapBearing)) < 2;
@@ -5004,9 +5241,21 @@ ${trkpts}
       }
     }
 
-    // 3D Tilt-Compensated Compass Heading (W3C Intrinsic Z-X'-Y'' Tait-Bryan Euler Angles)
-    // Projects the phone's horizontal forward vector v = (0, cos(beta), -sin(beta)) onto world (East, North),
-    // eliminating the 15°–40° heading error that occurs when holding a phone tilted in hand or on a scooter handlebar.
+    // Exact Gimbal-Lock-Free Heading from W3C AbsoluteOrientationSensor Quaternion [qx, qy, qz, qw]
+    // Computes horizontal forward vector via Z_earth x x_dev = (-nx, ex), immune to pitch/roll tilt!
+    function computeHeadingFromQuaternion(q) {
+      if (!Array.isArray(q) || q.length < 4) return null;
+      const [qx, qy, qz, qw] = q;
+      const ex = 1 - 2 * (qy * qy + qz * qz);
+      const nx = 2 * (qx * qy + qw * qz);
+      if (Math.hypot(ex, nx) < 0.05) return null;
+
+      let magHeading = (Math.atan2(-nx, ex) * 180) / Math.PI;
+      // Convert Magnetic North -> True Geographic North for Brasília, DF (-22.3° West declination)
+      return (magHeading + BRASILIA_MAGNETIC_DECLINATION_DEG + 360) % 360;
+    }
+
+    // 3D Tilt-Compensated Compass Heading from W3C Euler Angles (fallback for browsers without AbsoluteOrientationSensor)
     function computeTiltCompensatedHeading(alphaDeg, betaDeg, gammaDeg) {
       const rad = Math.PI / 180;
       const a = alphaDeg * rad;
@@ -5031,65 +5280,100 @@ ${trkpts}
       const screenAngle = (window.screen?.orientation?.angle || window.orientation || 0);
       magHeading = (magHeading + screenAngle + 360) % 360;
 
-      // Convert Magnetic North -> True Geographic North for Brasília, DF (-22.3° West declination)
-      // so the rotated map aligns 1:1 with Google Maps & Leaflet geographic tiles!
       return (magHeading + BRASILIA_MAGNETIC_DECLINATION_DEG + 360) % 360;
     }
 
-    // Smartphone Compass Listener (follows True North & exact 3D phone pointing direction like Google Maps)
+    // Multi-Tier Smartphone Compass Engine:
+    // 1) W3C AbsoluteOrientationSensor (Android Chrome hardware-fused quaternion, zero gimbal lock)
+    // 2) deviceorientationabsolute (accepts all numeric alpha events even if ev.absolute is omitted)
+    // 3) iOS webkitCompassHeading / graceful deviceorientation fallback
     let compassListenersAttached = false;
     function startPhoneCompassTracking() {
       if (compassListenersAttached) return;
       compassListenersAttached = true;
 
-      const handleAbsoluteOrientation = (ev) => {
-        let trueHeading = null;
+      let sensorApiActive = false;
+      let absEventReceived = false;
+      const startTs = Date.now();
 
-        if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) {
-          // iOS Safari webkitCompassHeading already compensates for tilt & true north when GPS is active
-          trueHeading = ev.webkitCompassHeading;
-        } else if (ev.absolute === true && typeof ev.alpha === 'number' && !isNaN(ev.alpha)) {
-          // Android Chrome absolute magnetometer: apply 3D tilt compensation + Brasília -22.3° True North declination
-          trueHeading = computeTiltCompensatedHeading(ev.alpha, ev.beta, ev.gamma);
-        }
+      const applyCompassReading = (trueHeading, source) => {
+        if (typeof trueHeading !== 'number' || isNaN(trueHeading)) return;
+        const normalized = ((trueHeading % 360) + 360) % 360;
+        state.nav.compassSource = source;
 
-        // Strictly reject non-absolute (relative gyro) events so arbitrary startup zero never corrupts alignment!
-        if (trueHeading === null) return;
-
-        // Deadband tiny < 1.2° magnetometer jitter when standing still
+        // Smooth low-pass filter with tiny 1° deadband so the map rotates fluidly without vibrating
         if (state.nav.deviceCompassHeading !== null) {
-          const jitter = Math.abs(normalizeAngleDiff(trueHeading - state.nav.deviceCompassHeading));
-          if (jitter < 1.2) return;
+          const jitter = Math.abs(normalizeAngleDiff(normalized - state.nav.deviceCompassHeading));
+          if (jitter < 1.0) return;
+          state.nav.deviceCompassHeading = blendAngleDeg(state.nav.deviceCompassHeading, normalized, 0.28);
+        } else {
+          state.nav.deviceCompassHeading = normalized;
         }
-
-        state.nav.deviceCompassHeading = state.nav.deviceCompassHeading === null
-          ? trueHeading
-          : blendAngleDeg(state.nav.deviceCompassHeading, trueHeading, 0.24);
 
         if (state.activeTab === 'navigation') {
           updateNavPuckArrow();
-          // Rotate map to follow phone pointing direction when compassMode is active & moving slowly/standing still
-          if (state.nav.compassMode && state.nav.currentSpeedKmh < 6 && !state.nav.isDemoMode) {
+          updateCompassBtnVisual();
+          // Follow phone pointing direction whenever standing still or riding slowly (< 9 km/h)
+          if (state.nav.compassMode && state.nav.currentSpeedKmh < 9 && !state.nav.isDemoMode) {
             setNavMapBearing(state.nav.deviceCompassHeading, true);
           }
         }
       };
 
-      // iOS 13+ permission gate (Android Chrome fires deviceorientationabsolute directly over HTTPS)
+      // Tier 1: Native Android Chrome AbsoluteOrientationSensor (hardware-fused Magnetometer + Gyro + Accel)
+      if (typeof window.AbsoluteOrientationSensor === 'function') {
+        try {
+          const sensor = new window.AbsoluteOrientationSensor({ frequency: 20, referenceFrame: 'screen' });
+          sensor.addEventListener('reading', () => {
+            const h = computeHeadingFromQuaternion(sensor.quaternion);
+            if (h !== null) {
+              sensorApiActive = true;
+              applyCompassReading(h, 'sensor-api');
+            }
+          });
+          sensor.addEventListener('error', () => {
+            sensorApiActive = false;
+          });
+          sensor.start();
+        } catch (e) {
+          sensorApiActive = false;
+        }
+      }
+
+      // Tier 2: deviceorientationabsolute (event name itself guarantees magnetometer reference on Android Chrome)
+      const handleDeviceOrientationAbsolute = (ev) => {
+        if (sensorApiActive) return;
+        if (typeof ev.alpha !== 'number' || isNaN(ev.alpha)) return;
+        absEventReceived = true;
+        const h = computeTiltCompensatedHeading(ev.alpha, ev.beta, ev.gamma);
+        applyCompassReading(h, 'abs-event');
+      };
+
+      // Tier 3: Standard deviceorientation (iOS Safari webkitCompassHeading, absolute flag, or delayed fallback)
+      const handleDeviceOrientationFallback = (ev) => {
+        if (sensorApiActive) return;
+        if (typeof ev.webkitCompassHeading === 'number' && !isNaN(ev.webkitCompassHeading)) {
+          absEventReceived = true;
+          applyCompassReading(ev.webkitCompassHeading, 'ios');
+          return;
+        }
+        if (absEventReceived) return;
+        if (typeof ev.alpha !== 'number' || isNaN(ev.alpha)) return;
+        if (ev.absolute === true || Date.now() - startTs > 1500) {
+          const h = computeTiltCompensatedHeading(ev.alpha, ev.beta, ev.gamma);
+          applyCompassReading(h, ev.absolute === true ? 'abs-event' : 'rel-event');
+        }
+      };
+
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission().then(res => {
           if (res === 'granted') {
-            window.addEventListener('deviceorientation', handleAbsoluteOrientation, true);
+            window.addEventListener('deviceorientation', handleDeviceOrientationFallback, true);
           }
         }).catch(() => {});
       } else {
-        window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation, true);
-        // Only listen to standard event if the browser explicitly flags ev.absolute === true
-        window.addEventListener('deviceorientation', (ev) => {
-          if (ev.absolute === true || typeof ev.webkitCompassHeading === 'number') {
-            handleAbsoluteOrientation(ev);
-          }
-        }, true);
+        window.addEventListener('deviceorientationabsolute', handleDeviceOrientationAbsolute, true);
+        window.addEventListener('deviceorientation', handleDeviceOrientationFallback, true);
       }
     }
 
@@ -5336,18 +5620,19 @@ ${trkpts}
       navCiclomapaGroup = L.layerGroup().addTo(navMap);
       navRouteGroup = L.layerGroup().addTo(navMap);
       navCrossingsGroup = L.layerGroup().addTo(navMap);
-
-      // Render loaded CicloMapa network (or Asa Norte base)
       syncNavCiclomapaOverlay();
-
-      // GPS Puck Marker (Waze/Maps Blue Navigation Chevron)
+      // GPS Puck Marker (Google Maps-style Blue Directional FOV Beam + Navigation Chevron)
       const puckIcon = L.divIcon({
         className: 'nav-gps-puck',
         html: `
           <div class="relative flex h-11 w-11 items-center justify-center">
-            <div class="gps-puck-pulse absolute inset-0 rounded-full bg-sky-400/50"></div>
-            <div id="navGpsArrowInner" class="relative flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-white bg-sky-500 shadow-2xl transition-transform duration-150">
-              <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <div class="gps-puck-pulse absolute inset-0 rounded-full bg-sky-400/45"></div>
+            <div id="navGpsArrowInner" class="relative flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-white bg-sky-500 shadow-2xl transition-transform duration-100">
+              <!-- Live Directional FOV Cone (Points where your phone faces, just like Google Maps) -->
+              <div class="pointer-events-none absolute -top-9 left-1/2 h-11 w-14 -translate-x-1/2"
+                style="background: radial-gradient(ellipse at bottom center, rgba(56,189,248,0.72) 0%, rgba(56,189,248,0.18) 62%, transparent 100%); clip-path: polygon(50% 100%, 8% 0%, 92% 0%);">
+              </div>
+              <svg class="relative h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
               </svg>
             </div>
@@ -5516,14 +5801,18 @@ ${trkpts}
       const totalMeters = Math.max(1, cum[cum.length - 1]);
       const proj = projectGpsOntoRoute(lat, lng, coords, cum);
 
-      // Compute speed (km/h) & smooth heading (uses GPS course while moving, or live phone compass when slow/stopped)
+      // Compute speed (km/h) & smooth heading:
+      // - Riding >= 9 km/h with valid GPS course: follow GPS travel direction (immune to motor/handlebar magnets)
+      // - Standing still or riding slowly (< 9 km/h): ALWAYS follow live smartphone compass pointing direction!
       const speedKmh = typeof speedMs === 'number' && !isNaN(speedMs) && speedMs >= 0
         ? Math.round(speedMs * 3.6)
         : 0;
       let effectiveHeading;
-      if (typeof headingDeg === 'number' && !isNaN(headingDeg) && speedKmh >= 6) {
+      if (state.nav.isDemoMode) {
+        effectiveHeading = typeof headingDeg === 'number' && !isNaN(headingDeg) ? headingDeg : proj.segBearing;
+      } else if (typeof headingDeg === 'number' && !isNaN(headingDeg) && speedKmh >= 9) {
         effectiveHeading = headingDeg;
-      } else if (state.nav.deviceCompassHeading !== null && !state.nav.isDemoMode) {
+      } else if (state.nav.deviceCompassHeading !== null) {
         effectiveHeading = state.nav.deviceCompassHeading;
       } else {
         effectiveHeading = proj.segBearing;
@@ -5869,6 +6158,9 @@ ${trkpts}
         btnNav.className = 'inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950 transition';
         btnSim.className = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-slate-300 transition hover:text-white';
 
+        // Start phone compass immediately on Android/HTTPS so the map & blue beam respond right away
+        startPhoneCompassTracking();
+
         setTimeout(() => {
           sizeNavRotatorContainer();
           initNavMap();
@@ -5965,17 +6257,57 @@ ${trkpts}
         }
         showToast('Obtendo GPS...', 'Aguarde enquanto localizamos seu ponto de partida.');
         navigator.geolocation.getCurrentPosition(
-          (pos) => {
+          async (pos) => {
             const pt = [+pos.coords.latitude.toFixed(6), +pos.coords.longitude.toFixed(6)];
             state.planner.originCoords = pt;
-            document.getElementById('planOriginInput').value = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
-            showToast('Origem GPS Definida!', 'Agora informe o destino (B) e clique em Calcular.');
+            const inputEl = document.getElementById('planOriginInput');
+            const fallbackLabel = `Mapa (${pt[0].toFixed(5)}, ${pt[1].toFixed(5)})`;
+            inputEl.value = fallbackLabel;
+            const prettyName = await photonReverseGeocode(pt[0], pt[1]);
+            if (prettyName && inputEl.value === fallbackLabel) {
+              inputEl.value = prettyName;
+            }
+            showToast('Origem GPS Definida!', prettyName ? `${prettyName} pronta para calcular.` : 'Agora informe o destino (B) e clique em Calcular.');
           },
           () => {
             showToast('GPS não autorizado', 'Permita o acesso à localização ou marque a origem com 📍.');
           },
           { enableHighAccuracy: true, timeout: 10000 }
         );
+      });
+
+      // Wire up Komoot Photon Live Search-As-You-Type Autocomplete on Simulador A -> B & GPS Quick Search
+      attachPhotonAutocomplete('planOriginInput', 'planOriginSuggestions', (item) => {
+        state.planner.originCoords = item.coords;
+      });
+      attachPhotonAutocomplete('planDestInput', 'planDestSuggestions', (item) => {
+        state.planner.destCoords = item.coords;
+      });
+      document.getElementById('planOriginInput').addEventListener('input', () => {
+        state.planner.originCoords = null;
+      });
+      document.getElementById('planDestInput').addEventListener('input', () => {
+        state.planner.destCoords = null;
+      });
+
+      // GPS Navigation Quick Search ("Ir para..." via Komoot Photon)
+      document.getElementById('btnNavQuickSearch').addEventListener('click', () => {
+        const box = document.getElementById('navQuickSearchBox');
+        const input = document.getElementById('navQuickSearchInput');
+        if (!box) return;
+        const willOpen = box.classList.contains('hidden');
+        box.classList.toggle('hidden', !willOpen);
+        if (willOpen && input) {
+          input.value = '';
+          setTimeout(() => input.focus(), 60);
+        }
+      });
+      document.getElementById('btnCloseNavSearch').addEventListener('click', () => {
+        const box = document.getElementById('navQuickSearchBox');
+        if (box) box.classList.add('hidden');
+      });
+      attachPhotonAutocomplete('navQuickSearchInput', 'navQuickSearchResults', (item) => {
+        launchQuickNavToDestination(item);
       });
 
       document.getElementById('btnPickOriginMap').addEventListener('click', () => setPlannerPickMode('origin'));
