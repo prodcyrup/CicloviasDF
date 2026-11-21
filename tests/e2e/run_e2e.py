@@ -700,9 +700,13 @@ def run_e2e() -> int:
             v_badge = cpage.locator("#eixoverde-sync-status").inner_text()
             check("Cloud Guest menu displays 'Visitante' & 'Entrar ou Criar Conta' button", "Visitante" in v_badge)
 
-            # Open AuthModal & test dark-mode focused input contrast + invalid login PT-BR error
+            # Open AuthModal & test Google OAuth button, dark-mode focused input contrast + invalid login PT-BR error
             cpage.click("#eixoverde-auth-open-btn")
             cpage.wait_for_selector("#eixoverde-auth-modal", timeout=6000)
+            check(
+                "AuthModal renders 'Continuar com Google' OAuth button",
+                cpage.locator("#eixoverde-auth-google-btn").is_visible(),
+            )
             email_in = cpage.locator("#eixoverde-auth-email")
             pass_in = cpage.locator("#eixoverde-auth-password")
             email_in.click()

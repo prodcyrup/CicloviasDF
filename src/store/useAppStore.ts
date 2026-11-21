@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   getCurrentSession,
   sendPasswordReset,
+  signInWithGoogle as authSignInWithGoogle,
   signInWithMagicLink,
   signInWithPassword,
   signOut as authSignOut,
@@ -154,6 +155,7 @@ export interface AppStore {
     displayName?: string
   ) => Promise<{ ok: boolean; needsEmailConfirmation?: boolean; error?: string }>;
   sendMagicLink: (email: string) => Promise<{ ok: boolean; error?: string }>;
+  signInWithGoogle: () => Promise<{ ok: boolean; error?: string }>;
   requestPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
   completePasswordRecovery: (newPassword: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => Promise<void>;
@@ -544,6 +546,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return { ok: false, error: res.error };
     }
     get().pushToast('Link mágico enviado!', 'Verifique sua caixa de entrada para entrar sem senha.', 'emerald');
+    return { ok: true };
+  },
+
+  async signInWithGoogle() {
+    set({ authLoading: true });
+    const res = await authSignInWithGoogle();
+    set({ authLoading: false });
+    if (res.error) {
+      return { ok: false, error: res.error };
+    }
     return { ok: true };
   },
 

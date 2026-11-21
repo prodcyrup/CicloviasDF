@@ -3,6 +3,7 @@ import {
   getCurrentSession,
   mapAuthErrorPtBr,
   sendPasswordReset,
+  signInWithGoogle,
   signInWithMagicLink,
   signInWithPassword,
   signOut,
@@ -49,6 +50,9 @@ describe('authService.ts PT-BR error mapping & user normalization', () => {
     expect(mapAuthErrorPtBr(new Error('Email not confirmed'))).toContain('Confirme seu e-mail');
     expect(mapAuthErrorPtBr(new Error('Password should be at least 6 characters'))).toContain('6 caracteres');
     expect(mapAuthErrorPtBr(new Error('Email rate limit exceeded'))).toContain('Muitas tentativas');
+    expect(mapAuthErrorPtBr(new Error('Unsupported provider: provider is not enabled'))).toContain(
+      'O login com Google ainda não foi ativado'
+    );
     expect(mapAuthErrorPtBr(new Error('Failed to fetch'))).toContain('Sem conexão');
   });
 
@@ -61,6 +65,9 @@ describe('authService.ts PT-BR error mapping & user normalization', () => {
 
     const login = await signInWithPassword('user@eixoverde.com', '123456');
     expect(login.error).toContain('Modo Local');
+
+    const googleLogin = await signInWithGoogle();
+    expect(googleLogin.error).toContain('Modo Local');
 
     const unsub = subscribeAuthChanges(() => {});
     expect(typeof unsub).toBe('function');
@@ -98,6 +105,7 @@ describe('authService.ts PT-BR error mapping & user normalization', () => {
         error: null,
       }),
       signInWithOtp: vi.fn().mockResolvedValue({ data: {}, error: null }),
+      signInWithOAuth: vi.fn().mockResolvedValue({ data: { provider: 'google', url: 'https://accounts.google.com' }, error: null }),
       resetPasswordForEmail: vi.fn().mockResolvedValue({ data: {}, error: null }),
       updateUser: vi.fn().mockResolvedValue({ data: {}, error: null }),
       signOut: vi.fn().mockResolvedValue({ error: null }),
@@ -122,6 +130,12 @@ describe('authService.ts PT-BR error mapping & user normalization', () => {
 
     const otpRes = await signInWithMagicLink('vitor@df.gov.br');
     expect(otpRes.sent).toBe(true);
+
+    const googleRes = await signInWithGoogle();
+    expect(googleRes.redirected).toBe(true);
+    expect(mockAuth.signInWithOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'google' })
+    );
 
     const resetRes = await sendPasswordReset('vitor@df.gov.br');
     expect(resetRes.sent).toBe(true);

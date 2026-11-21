@@ -58,6 +58,9 @@ export function mapAuthErrorPtBr(err: unknown): string {
   if (low.includes('invalid email') || low.includes('unable to validate email')) {
     return 'Informe um endereço de e-mail válido.';
   }
+  if (low.includes('provider is not enabled') || low.includes('unsupported provider')) {
+    return 'O login com Google ainda não foi ativado no painel do Supabase (Authentication → Providers → Google).';
+  }
   if (low.includes('failed to fetch') || low.includes('network') || low.includes('fetch')) {
     return 'Sem conexão com o servidor de autenticação. Seus dados continuam salvos localmente.';
   }
@@ -189,6 +192,32 @@ export async function signInWithMagicLink(
       return { error: mapAuthErrorPtBr(error) };
     }
     return { sent: true };
+  } catch (err) {
+    return { error: mapAuthErrorPtBr(err) };
+  }
+}
+
+export async function signInWithGoogle(): Promise<{ redirected?: boolean; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { error: 'Modo Local ativo — configure o Supabase para entrar com Google.' };
+  }
+
+  try {
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: getAuthRedirectUrl(),
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
+        },
+      },
+    });
+    if (error) {
+      return { error: mapAuthErrorPtBr(error) };
+    }
+    return { redirected: true };
   } catch (err) {
     return { error: mapAuthErrorPtBr(err) };
   }
