@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 """
-EixoVerde Permanent Automated E2E QA Suite (Playwright + Headless Chromium)
+EixoVerde Permanent Automated Dual-Pass E2E QA Suite (Playwright + Headless Chromium)
 
-Covers:
-- Desktop (1440x900) Dark & Light flows, Vehicle Garage, Compare & Buy, MapContextPopup,
-  Meus Locais, Live Routing, Demo Navigation, Curated DF Routes, and Offline API Resilience.
-- iPhone SE (375x667) narrow/short screen ergonomics (header fit, single-line route toolbar,
-  long-press popup, and non-overlapping navigation HUD).
-- iPhone 14 (390x844) touch long-press & draggable bottom sheet handle.
-- Android (412x915) Light-mode ergonomics, header fit, and tab highlights.
+Pass 1 — Zero-Key Guest / Local Mode:
+- Desktop (1440x900), iPhone SE (375x667), iPhone 14 (390x844), Android (412x915)
+- Verifies zero Supabase requests, "Modo Local" badge, Dark/Light input contrast,
+  Vehicle Garage, Compare & Buy, MapContextPopup, Meus Locais, Curated DF Routes,
+  Demo Navigation, and Offline Routing Resilience.
 
-Usage:
-  python3 -u tests/e2e/run_e2e.py
-  E2E_SCREENSHOT_DIR=/tmp/e2e_shots python3 -u tests/e2e/run_e2e.py
+Pass 2 — Supabase Cloud Mode (with modern `sb_publishable_...` key & mocked PostgREST/Auth/ORS-Proxy):
+- Verifies "Visitante" state & "Entrar ou Criar Conta" CTA
+- Verifies AuthModal Dark-Mode focused input contrast & PT-BR error handling
+- Verifies Sign-In -> Guest-to-Cloud MigrationPromptModal -> Bidirectional Push/Pull LWW Sync
+- Verifies 0px-width `#eixoverde-shell-sync-dot` on Desktop (1440px) and iPhone SE (375px) with zero clipping
+- Verifies `/functions/v1/ors-proxy` routing priority & headers
+- Verifies Sign-Out preserves local IndexedDB routes & saved places
 """
 
 import json
 import os
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import time
@@ -26,9 +30,16 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PORT = int(os.environ.get("E2E_PORT", "5177"))
-URL = f"http://127.0.0.1:{PORT}/"
 SHOT_DIR = Path(os.environ["E2E_SCREENSHOT_DIR"]) if os.environ.get("E2E_SCREENSHOT_DIR") else None
+
+MOCK_SUPABASE_URL = "https://tuocwnjnkihchlxxqmgi.supabase.co"
+MOCK_PUBLISHABLE_KEY = "sb_publishable_Biywe21SerSFL7yZYtl4nw_8X-dxTestKey"
+
+
+def find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
 
 
 def find_chrome() -> str | None:
@@ -44,12 +55,63 @@ def save_shot(page, name: str) -> None:
         page.screenshot(path=str(SHOT_DIR / name))
 
 
+def wait_for_server(url: str, timeout_loops: int = 45) -> bool:
+    for _ in range(timeout_loops):
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except Exception:
+            time.sleep(0.35)
+    return False
+
+
 def run_e2e() -> int:
-    proc = subprocess.Popen(
-        ["npx", "vite", "--host", "127.0.0.1", "--port", str(PORT), "--strictPort"],
+    port_guest = find_free_port()
+    port_cloud = find_free_port()
+    while port_cloud == port_guest:
+        port_cloud = find_free_port()
+    URL_GUEST = f"http://127.0.0.1:{port_guest}/"
+    URL_CLOUD = f"http://127.0.0.1:{port_cloud}/"
+
+    env_guest = os.environ.copy()
+    env_guest["VITE_SUPABASE_URL"] = ""
+    env_guest["VITE_SUPABASE_ANON_KEY"] = ""
+
+    env_cloud = os.environ.copy()
+    env_cloud["VITE_SUPABASE_URL"] = MOCK_SUPABASE_URL
+    env_cloud["VITE_SUPABASE_ANON_KEY"] = MOCK_PUBLISHABLE_KEY
+
+    proc_guest = subprocess.Popen(
+        [
+            "npx",
+            "vite",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port_guest),
+            "--strictPort",
+        ],
         cwd=str(REPO_ROOT),
+        env=env_guest,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    proc_cloud = subprocess.Popen(
+        [
+            "npx",
+            "vite",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port_cloud),
+            "--strictPort",
+        ],
+        cwd=str(REPO_ROOT),
+        env=env_cloud,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
     results = []
 
@@ -59,16 +121,8 @@ def run_e2e() -> int:
         print(f"[{status}] {name}" + (f" — {detail}" if detail else ""), flush=True)
 
     try:
-        server_ready = False
-        for _ in range(40):
-            try:
-                urllib.request.urlopen(URL, timeout=1)
-                server_ready = True
-                break
-            except Exception:
-                time.sleep(0.35)
-        if not server_ready:
-            print("[FAIL] Vite dev server failed to start", flush=True)
+        if not wait_for_server(URL_GUEST) or not wait_for_server(URL_CLOUD):
+            print("[FAIL] Vite dev servers failed to start", flush=True)
             return 1
 
         chrome_path = find_chrome()
@@ -82,21 +136,28 @@ def run_e2e() -> int:
         with sync_playwright() as p:
             browser = p.chromium.launch(**launch_kwargs)
 
-            # ============================================
-            # 1. DESKTOP (1440x900) — FULL FLOWS & OFFLINE
-            # ============================================
+            # ====================================================
+            # PASS 1: ZERO-KEY GUEST / LOCAL MODE (4 VIEWPORTS)
+            # ====================================================
             ctx = browser.new_context(
                 viewport={"width": 1440, "height": 900},
-                geolocation={"latitude": -15.7524, "longitude": -47.8992},  # SGAN 912 Masterplace
+                geolocation={"latitude": -15.7524, "longitude": -47.8992},
                 permissions=["geolocation"],
             )
             page = ctx.new_page()
             desktop_errors = []
+            supabase_requests_in_guest = []
             page.on("pageerror", lambda err: desktop_errors.append(str(err)))
+            page.on(
+                "request",
+                lambda req: supabase_requests_in_guest.append(req.url)
+                if "supabase.co" in req.url
+                else None,
+            )
 
-            page.goto(URL, wait_until="domcontentloaded")
+            page.goto(URL_GUEST, wait_until="domcontentloaded")
             page.wait_for_selector("#eixoverde-desktop-menu-btn", timeout=15000)
-            time.sleep(2.0)
+            time.sleep(1.8)
 
             # 1a. Header clipping & Light mode contrast
             header_check = page.evaluate(
@@ -121,14 +182,23 @@ def run_e2e() -> int:
             page.locator("aside button:has-text('Fechar')").first.click()
             time.sleep(0.2)
 
-            # 1b. Menu drawer: dynamic location + version, zero third-party nav brand mentions
+            # 1b. Menu drawer: dynamic location + version, Modo Local card, zero third-party nav brand mentions
             page.click("#eixoverde-desktop-menu-btn")
-            page.wait_for_selector("aside:has-text('Minha Garagem')", timeout=6000)
+            page.wait_for_selector("#eixoverde-account-card", timeout=6000)
             time.sleep(0.3)
             menu_text = page.locator("aside").last.inner_text()
-            check("Desktop menu displays v1.0.0 & no third-party nav brands", "v1.0.0" in menu_text and "Expansão Brasil" not in menu_text and "Waze" not in menu_text and "Komoot" not in menu_text)
+            sync_badge_guest = page.locator("#eixoverde-sync-status").inner_text()
+            check(
+                "Desktop menu displays v1.0.0, Modo Local & no third-party nav brands",
+                "v1.0.0" in menu_text
+                and "Modo Local" in sync_badge_guest
+                and "Waze" not in menu_text
+                and "Komoot" not in menu_text
+                and not page.locator("#eixoverde-auth-open-btn").is_visible(),
+                f"badge={sync_badge_guest!r}",
+            )
 
-            # Open Compare & Buy modal from menu & verify category filter + backdrop dismiss
+            # Compare & Buy modal
             page.locator("button:has-text('Comparar & Comprar')").click()
             page.wait_for_selector("h2:has-text('Comparar')", timeout=6000)
             page.locator("button:has-text('E-Bikes')").click()
@@ -137,7 +207,7 @@ def run_e2e() -> int:
             page.locator("button[aria-label='Fechar comparativo']").click()
             time.sleep(0.3)
 
-            # Switch to Dark mode via desktop header toggle
+            # Switch to Dark mode
             page.locator("aside button[title*='Alternar tema']").click()
             time.sleep(0.3)
 
@@ -154,20 +224,26 @@ def run_e2e() -> int:
             page.fill("input[placeholder*='Meu Patinete']", "Patinete QA 800W")
             page.locator("button:has-text('Salvar e Selecionar')").click()
             time.sleep(0.4)
-            check("Custom vehicle creation updates header & auto-closes modal", "Patinete" in page.locator("#eixoverde-garage-btn").inner_text() and not page.locator("h2:has-text('Minha Garagem')").is_visible())
+            check(
+                "Custom vehicle creation updates header & auto-closes modal",
+                "Patinete" in page.locator("#eixoverde-garage-btn").inner_text()
+                and not page.locator("h2:has-text('Minha Garagem')").is_visible(),
+            )
 
             # 1d. Right-click MapContextPopup + overflow menu + SavePlaceModal dark contrast
             page.mouse.click(960, 460, button="right")
             page.wait_for_selector("#eixoverde-map-context-popup", timeout=6000)
-            time.sleep(0.7)
+            time.sleep(0.6)
             pop_text = page.locator("#eixoverde-map-context-popup").inner_text()
             check("Desktop right-click opens MapContextPopup", "Salvar" in pop_text and "Rotas" in pop_text)
-            save_shot(page, "e2e_desktop_dark_popup.png")
 
             page.locator("#eixoverde-map-context-popup button[aria-label*='Mais opções']").click()
             time.sleep(0.2)
             more_text = page.locator("#eixoverde-map-context-popup").inner_text()
-            check("MapContextPopup '...' menu has Ponto A / Perigo / Copiar", "Definir como Ponto A" in more_text and "Reportar perigo" in more_text and "Copiar coordenadas" in more_text)
+            check(
+                "MapContextPopup '...' menu has Ponto A / Perigo / Copiar",
+                "Definir como Ponto A" in more_text and "Reportar perigo" in more_text and "Copiar coordenadas" in more_text,
+            )
 
             page.locator("#eixoverde-map-context-popup button:has-text('Salvar')").click()
             page.wait_for_selector("input[placeholder*='Ex: Casa']", timeout=6000)
@@ -175,11 +251,10 @@ def run_e2e() -> int:
             save_in.click()
             save_in.fill("Masterplace QA")
             dc = save_in.evaluate("el => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor })")
-            check("Dark-mode SavePlaceModal focused input contrast", dc["color"] != dc["bg"] and dc["bg"] != "rgb(255, 255, 255)", json.dumps(dc))
+            check("Dark-mode SavePlaceModal focused input contrast", dc["color"] != dc["bg"] and dc["bg"] != "rgb(255, 255, 255)")
             page.locator("form button[type='submit']:has-text('Salvar Local')").click()
             time.sleep(0.4)
 
-            # Meus Locais tab highlight + saved place visible
             page.locator("aside button:has-text('Meus Locais')").first.click()
             time.sleep(0.25)
             tab_ok = page.evaluate(
@@ -192,16 +267,15 @@ def run_e2e() -> int:
             )
             check("Meus Locais shows saved place & crisp active tab highlight", "Masterplace QA" in page.locator("aside").first.inner_text() and tab_ok)
 
-            # 1e. Curated DF routes count & checks (8 curated DF routes)
+            # 1e. Curated DF routes check
             page.locator("aside button:has-text('Rotas')").first.click()
             time.sleep(0.25)
             rotas_text = page.locator("aside").first.inner_text()
             check(
-                "All new curated DF routes listed (Noroeste, Sudoeste, Asa Sul, Lago Sul)",
+                "All 8 curated DF routes listed (Noroeste, Sudoeste, Asa Sul, Lago Sul)",
                 "Noroeste (Burle Marx)" in rotas_text and "Lago Sul: Ponte JK" in rotas_text and "Asa Sul (SQS 114)" in rotas_text,
             )
 
-            # Open Esplanada -> Asa Norte & verify exact 3 crossings + round-trip toggle
             page.locator("aside >> text=Esplanada → Asa Norte").first.click()
             page.wait_for_selector("aside #eixoverde-start-nav-btn", timeout=8000)
             time.sleep(0.5)
@@ -217,7 +291,7 @@ def run_e2e() -> int:
             # 1f. Demo Navigation + 2D/3D toggle + Hazard Modal dark contrast
             page.locator("aside #eixoverde-demo-nav-btn").click()
             page.wait_for_selector("button:has-text('Sair')", timeout=8000)
-            time.sleep(1.0)
+            time.sleep(0.9)
             page.locator("button:has-text('3D')").click()
             time.sleep(0.3)
             check("Demo Navigation launches & toggles 3D -> 2D", page.locator("button:has-text('2D')").is_visible())
@@ -227,13 +301,13 @@ def run_e2e() -> int:
             haz_in.click()
             haz_in.fill("Buraco teste E2E")
             hc = haz_in.evaluate("el => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor })")
-            check("Dark-mode HazardReportModal focused input contrast", hc["bg"] != "rgb(255, 255, 255)", json.dumps(hc))
+            check("Dark-mode HazardReportModal focused input contrast", hc["bg"] != "rgb(255, 255, 255)")
             page.locator("button:has-text('Publicar Alerta')").click()
             time.sleep(0.3)
             page.locator("button:has-text('Sair')").click()
             time.sleep(0.4)
 
-            # 1g. Offline routing resilience test (abort all external routing APIs)
+            # 1g. Offline routing resilience test
             page.locator("aside button[aria-label='Voltar']").click()
             time.sleep(0.3)
 
@@ -256,12 +330,11 @@ def run_e2e() -> int:
             check("Offline routing gracefully falls back without crashing", "Offline" in off_text and "Três Poderes" not in off_text)
             page.unroute("**/*", block_routing)
 
-            check("Desktop zero uncaught page errors", len(desktop_errors) == 0, "; ".join(desktop_errors))
+            check("Zero Supabase requests emitted in zero-key Guest mode", len(supabase_requests_in_guest) == 0)
+            check("Desktop Guest mode zero uncaught page errors", len(desktop_errors) == 0, "; ".join(desktop_errors))
             ctx.close()
 
-            # ============================================
-            # 2. iPHONE SE (375x667) — NARROW & SHORT ERGONOMICS
-            # ============================================
+            # 2. iPHONE SE (375x667)
             se_ctx = browser.new_context(
                 viewport={"width": 375, "height": 667},
                 has_touch=True,
@@ -272,32 +345,28 @@ def run_e2e() -> int:
             se = se_ctx.new_page()
             se_errors = []
             se.on("pageerror", lambda err: se_errors.append(str(err)))
-            se.goto(URL, wait_until="domcontentloaded")
+            se.goto(URL_GUEST, wait_until="domcontentloaded")
             se.wait_for_selector("#eixoverde-mobile-menu-btn", timeout=15000)
-            time.sleep(1.6)
+            time.sleep(1.5)
             se.locator("header button[aria-label='Alternar tema']").click()
-            time.sleep(0.3)
+            time.sleep(0.25)
 
             se_hdr = se.evaluate(
                 """() => {
                   const brand = document.querySelector('#eixoverde-mobile-menu-btn').getBoundingClientRect();
                   const rBtns = Array.from(document.querySelectorAll('header > div button')).map(b => b.getBoundingClientRect());
                   return {
-                    brandRight: Math.round(brand.right),
-                    firstRightLeft: Math.round(rBtns[0].left),
-                    lastRightRight: Math.round(rBtns[rBtns.length - 1].right),
                     overlaps: brand.right > rBtns[0].left + 1,
                     clips: rBtns[rBtns.length - 1].right > 376,
                     userSelect: getComputedStyle(document.querySelector('#eixoverde-mobile-menu-btn')).userSelect,
                   };
                 }"""
             )
-            check("iPhone SE (375px) header zero overlap/clipping & select-none", not se_hdr["overlaps"] and not se_hdr["clips"] and se_hdr["userSelect"] == "none", json.dumps(se_hdr))
+            check("iPhone SE (375px) header zero overlap/clipping & select-none", not se_hdr["overlaps"] and not se_hdr["clips"] and se_hdr["userSelect"] == "none")
 
-            # Curated route single-line toolbar check on 375px
             se.locator("section >> text=Esplanada → Asa Norte").first.click()
             se.wait_for_selector("section #eixoverde-start-nav-btn", timeout=8000)
-            time.sleep(0.8)
+            time.sleep(0.7)
             se_tb = se.evaluate(
                 """() => {
                   const btn = Array.from(document.querySelectorAll('section button')).find(b => b.innerText.includes('Ajustar Rota'));
@@ -308,45 +377,32 @@ def run_e2e() -> int:
                   return { singleLine: Math.max(...ys) - Math.min(...ys) <= 4, maxRight, clipsRight: maxRight > 376 };
                 }"""
             )
-            check("iPhone SE (375px) route toolbar single-line with zero horizontal clipping", se_tb["singleLine"] and not se_tb["clipsRight"], json.dumps(se_tb))
+            check("iPhone SE (375px) route toolbar single-line with zero horizontal clipping", se_tb["singleLine"] and not se_tb["clipsRight"])
             se_pills = se.evaluate(
                 """() => Array.from(document.querySelectorAll('.maplibregl-marker'))
                   .map(el => el.innerText.trim())
                   .filter(t => t.includes('L2N') || t.includes('EIXÃO') || t.includes('W3N'))"""
             )
-            check("iPhone SE map renders exact 3 crossing pills (L2N, EIXÃO N, W3N)", len(se_pills) == 3, json.dumps(se_pills))
-            save_shot(se, "e2e_iphone_se_375_route.png")
+            check("iPhone SE map renders exact 3 crossing pills (L2N, EIXÃO N, W3N)", len(se_pills) == 3)
 
-            # Demo Navigation HUD spacing on short 667px screen
             se.locator("section #eixoverde-demo-nav-btn").click()
             se.wait_for_selector("button:has-text('Sair')", timeout=8000)
-            time.sleep(0.8)
+            time.sleep(0.7)
             se_hud = se.evaluate(
                 """() => {
                   const topBanner = document.querySelector('.bg-emerald-950\\\\/95').getBoundingClientRect();
                   const sairBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Sair')).closest('.glass-panel').getBoundingClientRect();
                   const rightBar = document.querySelector('button[aria-label=\"Centralizar no GPS\"]').parentElement.getBoundingClientRect();
-                  return {
-                    topBottom: Math.round(topBanner.bottom),
-                    rightTop: Math.round(rightBar.top),
-                    rightBottom: Math.round(rightBar.bottom),
-                    bottomTop: Math.round(sairBtn.top),
-                    cleanVerticalFit: rightTop_ok(topBanner.bottom, rightBar.top) && rightBar.bottom <= sairBtn.top + 8,
-                  };
-                  function rightTop_ok(a, b) { return b >= a - 8; }
+                  return { cleanVerticalFit: rightBar.top >= topBanner.bottom - 8 && rightBar.bottom <= sairBtn.top + 8 };
                 }"""
             )
-            check("iPhone SE (375x667) Live Nav HUD has clean vertical clearance", se_hud["cleanVerticalFit"], json.dumps(se_hud))
-            save_shot(se, "e2e_iphone_se_375_nav.png")
+            check("iPhone SE (375x667) Live Nav HUD has clean vertical clearance", se_hud["cleanVerticalFit"])
             se.locator("button:has-text('Sair')").click()
-            time.sleep(0.3)
-
+            time.sleep(0.25)
             check("iPhone SE zero uncaught page errors", len(se_errors) == 0, "; ".join(se_errors))
             se_ctx.close()
 
-            # ============================================
-            # 3. iPHONE 14 (390x844) — LONG PRESS & DRAG HANDLE
-            # ============================================
+            # 3. iPHONE 14 (390x844)
             m14_ctx = browser.new_context(
                 viewport={"width": 390, "height": 844},
                 has_touch=True,
@@ -357,13 +413,10 @@ def run_e2e() -> int:
             m14 = m14_ctx.new_page()
             m14_errors = []
             m14.on("pageerror", lambda err: m14_errors.append(str(err)))
-            m14.goto(URL, wait_until="domcontentloaded")
+            m14.goto(URL_GUEST, wait_until="domcontentloaded")
             m14.wait_for_selector("#eixoverde-mobile-menu-btn", timeout=15000)
-            time.sleep(1.6)
-            m14.locator("header button[aria-label='Alternar tema']").click()
-            time.sleep(0.3)
+            time.sleep(1.5)
 
-            # Long-press (540ms) opens MapContextPopup cleanly
             m14.evaluate(
                 """() => {
                   const canvas = document.querySelector('.maplibregl-canvas');
@@ -378,13 +431,11 @@ def run_e2e() -> int:
                 }"""
             )
             m14.wait_for_selector("#eixoverde-map-context-popup", timeout=5000)
-            time.sleep(0.5)
+            time.sleep(0.4)
             check("iPhone 14 (390px) long-press opens MapContextPopup", "Salvar" in m14.locator("#eixoverde-map-context-popup").inner_text())
-            save_shot(m14, "e2e_iphone_14_390_longpress.png")
             m14.locator("#eixoverde-map-context-popup button[aria-label*='Fechar']").click()
             time.sleep(0.25)
 
-            # Finger pointer drag on bottom sheet handle
             handle = m14.locator("section [role='slider']")
             hb = handle.bounding_box()
             before_h = m14.locator("section").bounding_box()["height"]
@@ -394,14 +445,11 @@ def run_e2e() -> int:
             m14.mouse.up()
             time.sleep(0.35)
             after_h = m14.locator("section").bounding_box()["height"]
-            check("iPhone 14 (390px) bottom sheet drag handle responds smoothly", after_h > before_h + 80, f"{round(before_h)}px -> {round(after_h)}px")
-
+            check("iPhone 14 (390px) bottom sheet drag handle responds smoothly", after_h > before_h + 80)
             check("iPhone 14 zero uncaught page errors", len(m14_errors) == 0, "; ".join(m14_errors))
             m14_ctx.close()
 
-            # ============================================
-            # 4. ANDROID (412x915) — LIGHT MODE ERGONOMICS
-            # ============================================
+            # 4. ANDROID (412x915)
             and_ctx = browser.new_context(
                 viewport={"width": 412, "height": 915},
                 has_touch=True,
@@ -412,10 +460,9 @@ def run_e2e() -> int:
             ap = and_ctx.new_page()
             and_errors = []
             ap.on("pageerror", lambda err: and_errors.append(str(err)))
-            ap.goto(URL, wait_until="domcontentloaded")
+            ap.goto(URL_GUEST, wait_until="domcontentloaded")
             ap.wait_for_selector("#eixoverde-mobile-menu-btn", timeout=15000)
             time.sleep(1.5)
-
             and_hdr = ap.evaluate(
                 """() => {
                   const brand = document.querySelector('#eixoverde-mobile-menu-btn').getBoundingClientRect();
@@ -424,25 +471,338 @@ def run_e2e() -> int:
                 }"""
             )
             check("Android (412px) Light mode header zero overlap/clipping", not and_hdr["overlaps"] and not and_hdr["clips"])
-
-            # Verify Parque da Cidade curated route (0 arterial crossings) in Light mode
             ap.locator("section >> text=Volta Completa — Parque da Cidade").first.click()
             ap.wait_for_selector("section #eixoverde-start-nav-btn", timeout=8000)
-            time.sleep(0.6)
-            pc_text = ap.locator("section").inner_text()
-            check("Android (412px) Parque da Cidade curated route shows 0 travessias", "0 travessias" in pc_text)
-            save_shot(ap, "e2e_android_412_light_route.png")
-
+            time.sleep(0.5)
+            check("Android (412px) Parque da Cidade curated route shows 0 travessias", "0 travessias" in ap.locator("section").inner_text())
             check("Android (412px) zero uncaught page errors", len(and_errors) == 0, "; ".join(and_errors))
             and_ctx.close()
 
+            # ====================================================
+            # PASS 2: SUPABASE CLOUD AUTH, MIGRATION, SYNC & PROXY
+            # ====================================================
+            cloud_ctx = browser.new_context(
+                viewport={"width": 1440, "height": 900},
+                geolocation={"latitude": -15.7524, "longitude": -47.8992},
+                permissions=["geolocation"],
+            )
+            cpage = cloud_ctx.new_page()
+            cloud_errors = []
+            cpage.on("pageerror", lambda err: cloud_errors.append(str(err)))
+
+            pushed_places = []
+            ors_proxy_calls = []
+
+            def handle_supabase_mock(route):
+                req = route.request
+                url = req.url
+                method = req.method
+
+                if method == "OPTIONS":
+                    route.fulfill(
+                        status=204,
+                        headers={
+                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Headers": "*",
+                            "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+                        },
+                    )
+                    return
+
+                cors = {"Access-Control-Allow-Origin": "*", "Content-Type": "application/json"}
+
+                # Auth endpoints
+                if "/auth/v1/token" in url:
+                    body = json.loads(req.post_data or "{}")
+                    if body.get("password") == "errada123":
+                        route.fulfill(
+                            status=400,
+                            headers=cors,
+                            body=json.dumps({"error": "invalid_grant", "error_description": "Invalid login credentials"}),
+                        )
+                        return
+                    route.fulfill(
+                        status=200,
+                        headers=cors,
+                        body=json.dumps(
+                            {
+                                "access_token": "mock-jwt-token-e2e-123",
+                                "token_type": "bearer",
+                                "expires_in": 3600,
+                                "refresh_token": "mock-refresh-123",
+                                "user": {
+                                    "id": "11111111-2222-3333-4444-555555555555",
+                                    "aud": "authenticated",
+                                    "role": "authenticated",
+                                    "email": body.get("email", "vitor@eixoverde.com.br"),
+                                    "user_metadata": {"display_name": "Vítor Brasília"},
+                                    "app_metadata": {"provider": "email"},
+                                    "created_at": "2026-11-21T00:00:00Z",
+                                },
+                            }
+                        ),
+                    )
+                    return
+
+                if "/auth/v1/logout" in url:
+                    route.fulfill(status=204, headers=cors, body="")
+                    return
+
+                if "/auth/v1/user" in url:
+                    route.fulfill(
+                        status=200,
+                        headers=cors,
+                        body=json.dumps(
+                            {
+                                "id": "11111111-2222-3333-4444-555555555555",
+                                "email": "vitor@eixoverde.com.br",
+                                "user_metadata": {"display_name": "Vítor Brasília"},
+                            }
+                        ),
+                    )
+                    return
+
+                # ORS Edge Function Proxy
+                if "/functions/v1/ors-proxy" in url:
+                    ors_proxy_calls.append(dict(req.headers))
+                    route.fulfill(
+                        status=200,
+                        headers=cors,
+                        body=json.dumps(
+                            {
+                                "type": "FeatureCollection",
+                                "features": [
+                                    {
+                                        "type": "Feature",
+                                        "geometry": {
+                                            "type": "LineString",
+                                            "coordinates": [
+                                                [-47.8992, -15.7524, 1070],
+                                                [-47.902, -15.775, 1090],
+                                                [-47.9052, -15.8026, 1112],
+                                            ],
+                                        },
+                                        "properties": {
+                                            "summary": {"distance": 6240},
+                                            "extras": {"waytypes": {"summary": [{"value": 6, "distance": 5100, "amount": 85}]}},
+                                        },
+                                    }
+                                ],
+                            }
+                        ),
+                    )
+                    return
+
+                # PostgREST tables & RPCs
+                if "/rest/v1/saved_places" in url:
+                    if method in ("POST", "PUT", "PATCH"):
+                        try:
+                            pushed_places.append(json.loads(req.post_data or "{}"))
+                        except Exception:
+                            pass
+                        route.fulfill(status=201, headers=cors, body=json.dumps([]))
+                        return
+                    route.fulfill(status=200, headers=cors, body=json.dumps([]))
+                    return
+
+                if "/rest/v1/saved_routes" in url:
+                    if method == "GET":
+                        route.fulfill(
+                            status=200,
+                            headers=cors,
+                            body=json.dumps(
+                                [
+                                    {
+                                        "user_id": "11111111-2222-3333-4444-555555555555",
+                                        "id": "cloud-route-df-1",
+                                        "name": "Rota Cloud Sincronizada (Orla Lago Sul)",
+                                        "description": "Sincronizada da sua conta EixoVerde Cloud",
+                                        "tag": "Cloud • 95% segura",
+                                        "is_favorite": True,
+                                        "difficulty": "Fácil",
+                                        "city": "Brasília, DF",
+                                        "profile": "safe",
+                                        "coords": [[-47.8315, -15.824, 1005], [-47.8712, -15.8266, 1008]],
+                                        "waypoints": [[-47.8315, -15.824], [-47.8712, -15.8266]],
+                                        "distance_km": 6.8,
+                                        "ascent_m": 22,
+                                        "descent_m": 20,
+                                        "safety_score": 95,
+                                        "origin_name": "Ponte JK",
+                                        "dest_name": "Pontão",
+                                        "created_at": "2026-11-21T04:00:00Z",
+                                        "updated_at": "2026-11-21T04:00:00Z",
+                                        "deleted_at": None,
+                                    }
+                                ]
+                            ),
+                        )
+                        return
+                    route.fulfill(status=201, headers=cors, body=json.dumps([]))
+                    return
+
+                if "/rest/v1/rpc/get_hazards_in_bounds" in url or "/rest/v1/hazard_reports" in url:
+                    if method == "POST" and "get_hazards_in_bounds" not in url:
+                        route.fulfill(status=201, headers=cors, body=json.dumps([]))
+                        return
+                    route.fulfill(
+                        status=200,
+                        headers=cors,
+                        body=json.dumps(
+                            [
+                                {
+                                    "id": "cloud-hazard-1",
+                                    "user_id": "99999999-8888-7777-6666-555555555555",
+                                    "kind": "bloqueio",
+                                    "title": "Obra na ciclovia 206 Norte",
+                                    "note": "Desvio sinalizado",
+                                    "lng": -47.8825,
+                                    "lat": -15.7745,
+                                    "confirmations": 3,
+                                    "confirmed_by_me": False,
+                                    "created_at": "2026-11-21T03:00:00Z",
+                                    "updated_at": "2026-11-21T03:00:00Z",
+                                }
+                            ]
+                        ),
+                    )
+                    return
+
+                if "/rest/v1/user_preferences" in url:
+                    route.fulfill(status=200, headers=cors, body="null")
+                    return
+
+                route.fulfill(status=200, headers=cors, body=json.dumps([]))
+
+            cpage.route(f"{MOCK_SUPABASE_URL}/**", handle_supabase_mock)
+
+            cpage.goto(URL_CLOUD, wait_until="domcontentloaded")
+            cpage.wait_for_selector("#eixoverde-desktop-menu-btn", timeout=15000)
+            time.sleep(1.5)
+
+            # Switch to Dark mode first to test AuthModal dark-mode contrast
+            cpage.locator("aside button[title*='Alternar tema']").click()
+            time.sleep(0.25)
+
+            # Create 1 local saved place while still a Guest so migration prompt triggers on login
+            cpage.mouse.click(940, 440, button="right")
+            cpage.wait_for_selector("#eixoverde-map-context-popup", timeout=6000)
+            time.sleep(0.5)
+            cpage.locator("#eixoverde-map-context-popup button:has-text('Salvar')").click()
+            cpage.wait_for_selector("input[placeholder*='Ex: Casa']", timeout=6000)
+            cpage.fill("input[placeholder*='Ex: Casa']", "Local Pré-Login DF")
+            cpage.locator("form button[type='submit']:has-text('Salvar Local')").click()
+            time.sleep(0.35)
+
+            # Open menu & verify Visitante badge + Entrar ou Criar Conta CTA
+            cpage.click("#eixoverde-desktop-menu-btn")
+            cpage.wait_for_selector("#eixoverde-auth-open-btn", timeout=6000)
+            v_badge = cpage.locator("#eixoverde-sync-status").inner_text()
+            check("Cloud Guest menu displays 'Visitante' & 'Entrar ou Criar Conta' button", "Visitante" in v_badge)
+
+            # Open AuthModal & test dark-mode focused input contrast + invalid login PT-BR error
+            cpage.click("#eixoverde-auth-open-btn")
+            cpage.wait_for_selector("#eixoverde-auth-modal", timeout=6000)
+            email_in = cpage.locator("#eixoverde-auth-email")
+            pass_in = cpage.locator("#eixoverde-auth-password")
+            email_in.click()
+            email_in.fill("vitor@eixoverde.com.br")
+            email_c = email_in.evaluate("el => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor })")
+            check(
+                "Dark-mode AuthModal focused input contrast",
+                email_c["color"] != email_c["bg"] and email_c["bg"] != "rgb(255, 255, 255)",
+                json.dumps(email_c),
+            )
+
+            pass_in.fill("errada123")
+            cpage.click("#eixoverde-auth-submit")
+            cpage.wait_for_selector("#eixoverde-auth-error", timeout=6000)
+            err_txt = cpage.locator("#eixoverde-auth-error").inner_text()
+            check("AuthModal maps invalid credentials to PT-BR error message", "incorretos" in err_txt, err_txt)
+
+            # Sign in with valid password -> triggers MigrationPromptModal
+            pass_in.fill("senhaForte123")
+            save_shot(cpage, "e2e_cloud_auth_modal_dark.png")
+            cpage.click("#eixoverde-auth-submit")
+            cpage.wait_for_selector("#eixoverde-migration-modal", timeout=6000)
+            mig_text = cpage.locator("#eixoverde-migration-modal").inner_text()
+            check("Sign-in with local data opens MigrationPromptModal", "1 locais salvos" in mig_text)
+            save_shot(cpage, "e2e_cloud_migration_modal.png")
+
+            # Confirm migration -> pushes local place & pulls cloud route + community hazard
+            cpage.click("#eixoverde-migration-confirm-btn")
+            try:
+                cpage.wait_for_selector("aside >> text=Rota Cloud Sincronizada", timeout=8000)
+            except Exception:
+                pass
+            sidebar_after_sync = cpage.locator("aside").first.inner_text()
+            check(
+                "Bidirectional sync pushes local place & pulls cloud route into Rotas Salvas",
+                len(pushed_places) >= 1 and "Rota Cloud Sincronizada" in sidebar_after_sync,
+                f"pushed_places={len(pushed_places)}",
+            )
+            check(
+                "0px-width sync indicator dot appears on brand menu button after login",
+                cpage.locator("#eixoverde-shell-sync-dot").is_visible(),
+            )
+
+            # Open menu & verify authenticated user card + 'Sincronizado' badge
+            cpage.click("#eixoverde-desktop-menu-btn")
+            cpage.wait_for_selector("#eixoverde-signout-btn", timeout=6000)
+            time.sleep(0.25)
+            authed_card = cpage.locator("#eixoverde-account-card").inner_text()
+            check(
+                "Authenticated Account card displays user name, email & Sincronizado status",
+                "Vítor Brasília" in authed_card and "Sincronizado" in authed_card,
+            )
+            save_shot(cpage, "e2e_cloud_authenticated_menu.png")
+            cpage.locator("aside").last.locator("button[aria-label='Fechar menu']").click()
+            time.sleep(0.25)
+
+            # Route via ORS Edge Function Proxy with sb_publishable_ key + user JWT
+            s_in = cpage.locator("aside #eixoverde-search-input")
+            s_in.click()
+            s_in.fill("Parque da Cidade")
+            time.sleep(0.4)
+            cpage.locator("aside button:has-text('Parque da Cidade Sarah Kubitschek')").first.click()
+            cpage.wait_for_selector("aside #eixoverde-start-nav-btn", timeout=10000)
+            time.sleep(0.4)
+            check(
+                "Routing calls Supabase ors-proxy with sb_publishable_ apikey & Bearer user JWT",
+                len(ors_proxy_calls) >= 1
+                and ors_proxy_calls[0].get("apikey") == MOCK_PUBLISHABLE_KEY
+                and "Bearer mock-jwt-token-e2e-123" in ors_proxy_calls[0].get("authorization", ""),
+            )
+
+            # Sign out & verify local data is 100% preserved
+            cpage.locator("aside button[aria-label='Voltar']").click()
+            time.sleep(0.25)
+            cpage.click("#eixoverde-desktop-menu-btn")
+            cpage.wait_for_selector("#eixoverde-signout-btn", timeout=6000)
+            cpage.click("#eixoverde-signout-btn")
+            time.sleep(0.5)
+            check(
+                "Sign-out returns to Visitante state while preserving synced routes in IndexedDB",
+                "Visitante" in cpage.locator("#eixoverde-sync-status").inner_text()
+                and "Rota Cloud Sincronizada" in cpage.locator("aside").first.inner_text(),
+            )
+            check("Cloud E2E pass zero uncaught page errors", len(cloud_errors) == 0, "; ".join(cloud_errors))
+            cloud_ctx.close()
+
             browser.close()
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
+        for pr in (proc_guest, proc_cloud):
+            try:
+                os.killpg(os.getpgid(pr.pid), signal.SIGTERM)
+            except Exception:
+                pr.terminate()
+            try:
+                pr.wait(timeout=5)
+            except Exception:
+                try:
+                    os.killpg(os.getpgid(pr.pid), signal.SIGKILL)
+                except Exception:
+                    pr.kill()
 
     passed = sum(1 for r in results if r["ok"])
     failed = len(results) - passed

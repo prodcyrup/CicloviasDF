@@ -1,5 +1,13 @@
+import { getCurrentSession } from '../cloud/authService';
 import { BRAND } from '../config/brand';
-import { API_KEYS, ENDPOINTS, hasOrsKey } from '../config/providers';
+import {
+  API_KEYS,
+  ENDPOINTS,
+  getOrsProxyUrl,
+  getSupabaseConfig,
+  hasOrsKey,
+  hasSupabaseConfig,
+} from '../config/providers';
 import { POPULAR_DF_PLACES } from '../data/curatedRoutes';
 import type {
   Coord3D,
@@ -22,6 +30,7 @@ interface ProfileMeta {
   profile: RouteProfileId;
   title: string;
   subtitle: string;
+  orsProfile: 'cycling-regular' | 'cycling-electric' | 'cycling-road';
   orsEndpoint: string;
   orsPreference: 'recommended' | 'shortest';
   brouterProfile: string;
@@ -32,6 +41,7 @@ const PROFILE_DEFS: ProfileMeta[] = [
     profile: 'safe',
     title: 'Mais Segura • Ciclovias',
     subtitle: 'Prioriza ciclovias segregadas, parques e vias calmas',
+    orsProfile: 'cycling-regular',
     orsEndpoint: ENDPOINTS.orsCyclingRegular,
     orsPreference: 'recommended',
     brouterProfile: 'safety',
@@ -40,6 +50,7 @@ const PROFILE_DEFS: ProfileMeta[] = [
     profile: 'balanced',
     title: 'Equilibrada',
     subtitle: 'Bom equilíbrio entre ciclovias e tempo de viagem',
+    orsProfile: 'cycling-electric',
     orsEndpoint: ENDPOINTS.orsCyclingElectric,
     orsPreference: 'recommended',
     brouterProfile: 'trekking',
@@ -48,6 +59,7 @@ const PROFILE_DEFS: ProfileMeta[] = [
     profile: 'fast',
     title: 'Mais Rápida',
     subtitle: 'Trajeto mais direto para velocidade de cruzeiro',
+    orsProfile: 'cycling-road',
     orsEndpoint: ENDPOINTS.orsCyclingRoad,
     orsPreference: 'shortest',
     brouterProfile: 'fastbike',
@@ -113,6 +125,87 @@ function parseOrsWaytypes(
   return { cicloviaPct, ciclofaixaPct, baixaVelPct, trilhaPct, viaComumPct, safetyScore };
 }
 
+function parseOrsGeoJsonFeature(
+  json: unknown,
+  waypoints: LngLat[],
+  meta: ProfileMeta
+): RouteCandidate | null {
+  const feat = (json as { features?: Array<{ geometry?: { coordinates?: number[][] }; properties?: { summary?: { distance?: number }; extras?: { waytypes?: { summary?: Array<{ value: number; distance: number; amount: number }> } } } }> })?.features?.[0];
+  const rawCoords: number[][] | undefined = feat?.geometry?.coordinates;
+  if (!Array.isArray(rawCoords) || rawCoords.length < 2) return null;
+
+  const coords: Coord3D[] = rawCoords.map((c) =>
+    c.length >= 3 ? [+c[0].toFixed(6), +c[1].toFixed(6), +c[2].toFixed(1)] : [+c[0].toFixed(6), +c[1].toFixed(6)]
+  );
+  const distMeters = feat?.properties?.summary?.distance;
+  const distanceKm =
+    typeof distMeters === 'number' ? +(distMeters / 1000).toFixed(2) : computePathDistanceKm(coords);
+  const elevation = computeElevationStats(coords);
+  const waySummary = feat?.properties?.extras?.waytypes?.summary;
+  const surfaces = parseOrsWaytypes(waySummary, coords, meta.profile);
+  const crossings = detectArterialCrossings(coords);
+  const maneuvers = extractRouteManeuvers(coords);
+
+  return {
+    id: `ors-${meta.profile}-${Date.now()}`,
+    profile: meta.profile,
+    title: meta.title,
+    subtitle: meta.subtitle,
+    source: 'ors',
+    coords,
+    distanceKm,
+    elevation,
+    surfaces,
+    crossings,
+    maneuvers,
+    waypoints,
+  };
+}
+
+async function fetchOrsProxyCandidate(
+  waypoints: LngLat[],
+  meta: ProfileMeta,
+  accessToken: string | null
+): Promise<RouteCandidate | null> {
+  const proxyUrl = getOrsProxyUrl();
+  const cfg = getSupabaseConfig();
+  if (!proxyUrl || !cfg) return null;
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      apikey: cfg.anonKey,
+    };
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    } else if (cfg.anonKey.startsWith('eyJ')) {
+      headers.Authorization = `Bearer ${cfg.anonKey}`;
+    }
+
+    const res = await fetchWithTimeout(
+      proxyUrl,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          profile: meta.orsProfile,
+          coordinates: waypoints,
+          preference: meta.orsPreference,
+          elevation: true,
+          extra_info: ['waytype', 'surface'],
+          instructions: false,
+        }),
+      },
+      9500
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    return parseOrsGeoJsonFeature(json, waypoints, meta);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchOrsCandidate(
   waypoints: LngLat[],
   meta: ProfileMeta
@@ -139,36 +232,7 @@ async function fetchOrsCandidate(
     );
     if (!res.ok) return null;
     const json = await res.json();
-    const feat = json?.features?.[0];
-    const rawCoords: number[][] = feat?.geometry?.coordinates;
-    if (!Array.isArray(rawCoords) || rawCoords.length < 2) return null;
-
-    const coords: Coord3D[] = rawCoords.map((c) =>
-      c.length >= 3 ? [+c[0].toFixed(6), +c[1].toFixed(6), +c[2].toFixed(1)] : [+c[0].toFixed(6), +c[1].toFixed(6)]
-    );
-    const distMeters = feat?.properties?.summary?.distance;
-    const distanceKm =
-      typeof distMeters === 'number' ? +(distMeters / 1000).toFixed(2) : computePathDistanceKm(coords);
-    const elevation = computeElevationStats(coords);
-    const waySummary = feat?.properties?.extras?.waytypes?.summary;
-    const surfaces = parseOrsWaytypes(waySummary, coords, meta.profile);
-    const crossings = detectArterialCrossings(coords);
-    const maneuvers = extractRouteManeuvers(coords);
-
-    return {
-      id: `ors-${meta.profile}-${Date.now()}`,
-      profile: meta.profile,
-      title: meta.title,
-      subtitle: meta.subtitle,
-      source: 'ors',
-      coords,
-      distanceKm,
-      elevation,
-      surfaces,
-      crossings,
-      maneuvers,
-      waypoints,
-    };
+    return parseOrsGeoJsonFeature(json, waypoints, meta);
   } catch {
     return null;
   }
@@ -277,9 +341,13 @@ async function fetchOsrmAlternatives(waypoints: LngLat[]): Promise<RouteCandidat
 }
 
 /**
- * Calculates up to 3 distinct cycling route profiles (Safe, Balanced, Fast)
- * using OpenRouteService when VITE_ORS_KEY is configured, or automatic zero-key
- * BRouter + OSRM fallback so the app works anywhere in Brazil out of the box.
+ * Calculates up to 3 distinct cycling route profiles (Safe, Balanced, Fast).
+ * Fallback priority chain:
+ *  1) Supabase Edge Function `/functions/v1/ors-proxy` (when VITE_SUPABASE_URL/ANON_KEY configured)
+ *  2) Direct OpenRouteService (when VITE_ORS_KEY configured)
+ *  3) BRouter cycling engine
+ *  4) OSRM Bike alternatives
+ *  5) Offline straight-line fallback
  */
 export async function planMultiProfileRoutes(
   waypoints: LngLat[],
@@ -290,7 +358,15 @@ export async function planMultiProfileRoutes(
 
   let candidates: RouteCandidate[] = [];
 
-  if (hasOrsKey()) {
+  if (hasSupabaseConfig()) {
+    const { accessToken } = await getCurrentSession();
+    const proxyResults = await Promise.all(
+      PROFILE_DEFS.map((meta) => fetchOrsProxyCandidate(waypoints, meta, accessToken))
+    );
+    candidates = proxyResults.filter((r): r is RouteCandidate => r !== null);
+  }
+
+  if (candidates.length === 0 && hasOrsKey()) {
     const results = await Promise.all(PROFILE_DEFS.map((meta) => fetchOrsCandidate(waypoints, meta)));
     candidates = results.filter((r): r is RouteCandidate => r !== null);
   }

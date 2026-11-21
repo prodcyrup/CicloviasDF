@@ -35,6 +35,8 @@ jobs:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_MAPTILER_KEY: ${{ secrets.VITE_MAPTILER_KEY }}
           VITE_ORS_KEY: ${{ secrets.VITE_ORS_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - name: Upload Pages artifact

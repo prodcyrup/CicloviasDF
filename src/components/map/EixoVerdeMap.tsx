@@ -649,7 +649,7 @@ export function EixoVerdeMap() {
     });
   }, [candidates, selectedCandidateIdx, isEditingWaypoints, mode]);
 
-  // Render Waze-style Local Hazard Pins
+  // Render Community & Local Hazard Pins (XSS-safe DOM popup + Confirmar/Remover buttons)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -668,20 +668,75 @@ export function EixoVerdeMap() {
 
     hazards.forEach((h) => {
       const el = document.createElement('div');
-      el.innerHTML = `<div style="width:30px;height:30px;border-radius:10px;background:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer">${iconMap[h.kind] ?? '⚠️'}</div>`;
-      const popup = new maplibregl.Popup({ offset: 16, maxWidth: '230px' }).setHTML(
-        `<div style="font-family:Inter,sans-serif">
-           <div style="font-size:10px;font-weight:800;color:#d97706;text-transform:uppercase">Alerta da Comunidade (Local)</div>
-           <div style="font-size:13px;font-weight:700;color:#0f172a;margin:2px 0">${h.title}</div>
-           ${h.note ? `<div style="font-size:12px;color:#475569">${h.note}</div>` : ''}
-         </div>`
-      );
+      const badge = document.createElement('div');
+      badge.style.cssText =
+        'width:30px;height:30px;border-radius:10px;background:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer';
+      badge.textContent = iconMap[h.kind] ?? '⚠️';
+      el.appendChild(badge);
+
+      const popupRoot = document.createElement('div');
+      popupRoot.style.cssText = 'font-family:Inter,sans-serif;min-width:170px';
+
+      const headerEl = document.createElement('div');
+      headerEl.style.cssText = 'font-size:10px;font-weight:800;color:#d97706;text-transform:uppercase';
+      headerEl.textContent = h.isCommunity
+        ? `Alerta da Comunidade (${h.confirmations} conf.)`
+        : `Alerta no Mapa (${h.confirmations} conf.)`;
+      popupRoot.appendChild(headerEl);
+
+      const titleEl = document.createElement('div');
+      titleEl.style.cssText = 'font-size:13px;font-weight:700;color:#0f172a;margin:2px 0';
+      titleEl.textContent = h.title;
+      popupRoot.appendChild(titleEl);
+
+      if (h.note) {
+        const noteEl = document.createElement('div');
+        noteEl.style.cssText = 'font-size:12px;color:#475569;margin-bottom:6px';
+        noteEl.textContent = h.note;
+        popupRoot.appendChild(noteEl);
+      }
+
+      const actionsEl = document.createElement('div');
+      actionsEl.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px';
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.setAttribute('data-hazard-confirm', h.id);
+      confirmBtn.disabled = Boolean(h.confirmedByMe);
+      confirmBtn.style.cssText =
+        'flex:1;background:#059669;color:#fff;border:none;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer';
+      confirmBtn.textContent = h.confirmedByMe ? '✓ Confirmado' : `Confirmar (${h.confirmations})`;
+      confirmBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        void useAppStore.getState().confirmHazard(h.id);
+      });
+      actionsEl.appendChild(confirmBtn);
+
+      const st = useAppStore.getState();
+      const canDelete = !h.isCommunity || !h.userId || h.userId === st.authUser?.id;
+      if (canDelete) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.setAttribute('data-hazard-delete', h.id);
+        delBtn.style.cssText =
+          'background:#f1f5f9;color:#e11d48;border:1px solid #cbd5e1;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer';
+        delBtn.textContent = 'Remover';
+        delBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          void useAppStore.getState().deleteHazard(h.id);
+        });
+        actionsEl.appendChild(delBtn);
+      }
+
+      popupRoot.appendChild(actionsEl);
+
+      const popup = new maplibregl.Popup({ offset: 16, maxWidth: '240px' }).setDOMContent(popupRoot);
       const marker = new maplibregl.Marker({ element: el }).setLngLat(h.coords).setPopup(popup).addTo(map);
       hazardMarkersRef.current.push(marker);
     });
   }, [hazards, showHazards]);
 
-  // Render Saved Places (Casa, Trabalho, Favoritos) pins on map
+  // Render Saved Places (Casa, Trabalho, Favoritos) pins on map (XSS-safe DOM nodes)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -693,7 +748,15 @@ export function EixoVerdeMap() {
       const bg = sp.category === 'home' ? '#059669' : sp.category === 'work' ? '#0284c7' : '#d97706';
       const icon = sp.category === 'home' ? '🏠' : sp.category === 'work' ? '💼' : '⭐';
       const el = document.createElement('div');
-      el.innerHTML = `<div style="display:flex;align-items:center;gap:4px;background:${bg};color:#fff;font-family:Inter,sans-serif;font-size:11px;font-weight:700;padding:3px 8px 3px 6px;border-radius:999px;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.28);cursor:pointer;white-space:nowrap"><span>${icon}</span><span>${sp.label.slice(0, 18)}</span></div>`;
+      const pill = document.createElement('div');
+      pill.style.cssText = `display:flex;align-items:center;gap:4px;background:${bg};color:#fff;font-family:Inter,sans-serif;font-size:11px;font-weight:700;padding:3px 8px 3px 6px;border-radius:999px;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.28);cursor:pointer;white-space:nowrap`;
+      const iconSpan = document.createElement('span');
+      iconSpan.textContent = icon;
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = sp.label.slice(0, 18);
+      pill.appendChild(iconSpan);
+      pill.appendChild(labelSpan);
+      el.appendChild(pill);
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
         void useAppStore.getState().setDestination(

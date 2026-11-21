@@ -1,10 +1,17 @@
 import type { MapBasemapMode, ThemeMode } from '../types';
 
-const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+export interface SupabaseConfig {
+  url: string;
+  anonKey: string;
+}
 
 export const API_KEYS = {
-  maptiler: env?.VITE_MAPTILER_KEY?.trim() || '',
-  ors: env?.VITE_ORS_KEY?.trim() || '',
+  get maptiler(): string {
+    return (import.meta.env?.VITE_MAPTILER_KEY ?? '').trim();
+  },
+  get ors(): string {
+    return (import.meta.env?.VITE_ORS_KEY ?? '').trim();
+  },
 };
 
 export function hasMapTilerKey(): boolean {
@@ -13,6 +20,73 @@ export function hasMapTilerKey(): boolean {
 
 export function hasOrsKey(): boolean {
   return API_KEYS.ors.length > 6;
+}
+
+/**
+ * Dynamically resolves and validates Supabase configuration from Vite env vars.
+ * Accepts both modern Publishable keys (`sb_publishable_...`) and legacy JWT
+ * `anon` keys (`eyJ...`). Returns `null` cleanly in Guest/Local mode when
+ * either variable is missing, blank, partial, or invalid.
+ */
+const SUPABASE_KEY_REGEX = /^[\x21-\x7E]{16,}$/;
+
+export function getSupabaseConfig(
+  env: { readonly VITE_SUPABASE_URL?: string; readonly VITE_SUPABASE_ANON_KEY?: string } = import.meta.env ?? {},
+): SupabaseConfig | null {
+  const rawUrl = (env.VITE_SUPABASE_URL ?? '').trim();
+  const rawKey = (env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+
+  if (!rawUrl || !rawKey) {
+    return null;
+  }
+
+  if (/\s/.test(rawUrl)) {
+    return null;
+  }
+
+  if (!SUPABASE_KEY_REGEX.test(rawKey)) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    rawUrl.includes('?') ||
+    rawUrl.includes('#')
+  ) {
+    return null;
+  }
+
+  const isHttps = parsed.protocol === 'https:' && parsed.hostname.length > 0;
+  const isLocalHttp =
+    parsed.protocol === 'http:' &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+
+  if (!isHttps && !isLocalHttp) {
+    return null;
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+  const url = `${parsed.origin}${normalizedPath}`;
+  return { url, anonKey: rawKey };
+}
+
+export function hasSupabaseConfig(): boolean {
+  return getSupabaseConfig() !== null;
+}
+
+export function getOrsProxyUrl(): string | null {
+  const cfg = getSupabaseConfig();
+  return cfg ? `${cfg.url}/functions/v1/ors-proxy` : null;
 }
 
 /**

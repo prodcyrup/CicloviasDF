@@ -17,6 +17,7 @@ export function HazardReportModal() {
   const setOpen = useAppStore((s) => s.setHazardPickerOpen);
   const submitHazard = useAppStore((s) => s.submitHazard);
   const setMapPickTarget = useAppStore((s) => s.setMapPickTarget);
+  const authUser = useAppStore((s) => s.authUser);
 
   const [selected, setSelected] = useState<HazardKind>('buraco');
   const [note, setNote] = useState('');
@@ -31,8 +32,14 @@ export function HazardReportModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-xs sm:items-center sm:p-4">
-      <div className="w-full max-w-md overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900 sm:rounded-3xl">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+      onClick={() => setOpen(false)}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900 sm:rounded-3xl"
+      >
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
@@ -43,7 +50,9 @@ export function HazardReportModal() {
                 Reportar Perigo
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Salvo no mapa local (pronto para rede comunitária)
+                {authUser
+                  ? 'Compartilhado com a comunidade EixoVerde Cloud'
+                  : 'Salvo neste dispositivo (entre na conta para sincronizar)'}
               </p>
             </div>
           </div>
