@@ -39,7 +39,7 @@ import {
 } from '../../engine/navigation';
 import { computeRouteTelemetry } from '../../engine/telemetry';
 import { useFullscreen } from '../../hooks/useFullscreen';
-import { useAppStore } from '../../store/useAppStore';
+import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
 import type { ManeuverStep } from '../../types';
 
 function ManeuverIcon({ type }: { type: ManeuverStep['type'] }) {
@@ -70,7 +70,7 @@ export function LiveNavigationOverlay() {
   const nav = useAppStore((s) => s.nav);
   const voiceMode = useAppStore((s) => s.voiceMode);
   const theme = useAppStore((s) => s.theme);
-  const getActiveVehicle = useAppStore((s) => s.getActiveVehicle);
+  const activeVehicle = useAppStore(selectActiveVehicle);
   const selectedModeIndex = useAppStore((s) => s.selectedModeIndex);
   const riderWeightKg = useAppStore((s) => s.riderWeightKg);
 
@@ -83,7 +83,6 @@ export function LiveNavigationOverlay() {
   const pushToast = useAppStore((s) => s.pushToast);
 
   const activeRoute = candidates[selectedCandidateIdx];
-  const activeVehicle = getActiveVehicle();
   const activeMode = activeVehicle.modes[selectedModeIndex] ?? activeVehicle.modes[0];
 
   const cumDist = useMemo(

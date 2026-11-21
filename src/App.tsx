@@ -4,6 +4,7 @@ import { VehicleGarageModal } from './components/garage/VehicleGarageModal';
 import { EixoVerdeMap } from './components/map/EixoVerdeMap';
 import { HazardReportModal } from './components/navigation/HazardReportModal';
 import { LiveNavigationOverlay } from './components/navigation/LiveNavigationOverlay';
+import { SavePlaceModal } from './components/search/SavePlaceModal';
 import { AdaptiveShell } from './components/sheet/AdaptiveShell';
 import { AppMenuDrawer } from './components/sheet/AppMenuDrawer';
 import { ToastStack } from './components/ui/ToastStack';
@@ -30,6 +31,7 @@ export function App() {
       <VehicleGarageModal />
       <CompareBuyModal />
       <HazardReportModal />
+      <SavePlaceModal />
       <ToastStack />
     </main>
   );

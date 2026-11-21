@@ -20,6 +20,8 @@ import type {
   MapBasemapMode,
   PlaceResult,
   RouteCandidate,
+  SavedPlace,
+  SavedPlaceCategory,
   SavedRoute,
   ThemeMode,
   UserPreferences,
@@ -27,7 +29,15 @@ import type {
   VoiceMode,
 } from '../types';
 
-export type MapPickTarget = null | 'origin' | 'dest' | 'via' | 'hazard';
+export type MapPickTarget =
+  | null
+  | 'origin'
+  | 'dest'
+  | 'via'
+  | 'hazard'
+  | 'save_place'
+  | 'save_home'
+  | 'save_work';
 
 export interface ToastMessage {
   id: string;
@@ -51,7 +61,7 @@ interface NavState {
   reversed: boolean;
 }
 
-interface AppStore {
+export interface AppStore {
   initialized: boolean;
   mode: AppMode;
   theme: ThemeMode;
@@ -84,10 +94,11 @@ interface AppStore {
   fitBoundsNonce: number;
   flyToTarget: { coords: LngLat; zoom?: number; nonce: number } | null;
 
-  // Saved Routes & Hazards
+  // Saved Routes, Saved Places & Hazards
   savedRoutes: SavedRoute[];
+  savedPlaces: SavedPlace[];
   hazards: HazardReport[];
-  exploreTab: 'discover' | 'saved';
+  exploreTab: 'routes' | 'places';
 
   // Live Navigation
   nav: NavState;
@@ -98,6 +109,7 @@ interface AppStore {
   menuOpen: boolean;
   hazardPickerOpen: boolean;
   pendingHazardCoords: LngLat | null;
+  pendingSavePlace: { place: PlaceResult; defaultCategory: SavedPlaceCategory } | null;
   toasts: ToastMessage[];
 
   // Actions
@@ -109,7 +121,7 @@ interface AppStore {
   toggleBasemap: () => void;
   cycleVoiceMode: () => void;
   toggleLayer: (layer: 'lanes' | 'pois' | 'hazards') => void;
-  setExploreTab: (tab: 'discover' | 'saved') => void;
+  setExploreTab: (tab: 'routes' | 'places') => void;
 
   // Vehicle actions
   getAllVehicles: () => VehicleSpec[];
@@ -136,9 +148,18 @@ interface AppStore {
   clearActiveRoute: () => void;
   loadSavedRoute: (route: SavedRoute) => void;
   saveCurrentRoute: (customName?: string) => Promise<void>;
+  renameSavedRoute: (id: string, newName: string) => Promise<void>;
   deleteSavedRoute: (id: string) => Promise<void>;
   toggleFavoriteRoute: (id: string) => Promise<void>;
   importSavedRoute: (route: SavedRoute) => Promise<void>;
+
+  // Saved Places (Meus Locais)
+  openSavePlacePrompt: (place: PlaceResult, defaultCategory?: SavedPlaceCategory) => void;
+  closeSavePlacePrompt: () => void;
+  saveFavoritePlace: (place: PlaceResult, label: string, category: SavedPlaceCategory) => Promise<void>;
+  renameSavedPlace: (id: string, newLabel: string) => Promise<void>;
+  updateSavedPlaceCategory: (id: string, category: SavedPlaceCategory) => Promise<void>;
+  deleteSavedPlace: (id: string) => Promise<void>;
   setHomeOrWork: (slot: 'home' | 'work', place: PlaceResult) => void;
   setHoverCoordIndex: (idx: number | null) => void;
   requestFitRoute: () => void;
@@ -164,6 +185,15 @@ interface AppStore {
   setHazardPickerOpen: (open: boolean) => void;
   pushToast: (title: string, body?: string, tone?: ToastMessage['tone']) => void;
   dismissToast: (id: string) => void;
+}
+
+/** Reactive Zustand selector so any component immediately re-renders when active vehicle changes */
+export function selectActiveVehicle(state: AppStore): VehicleSpec {
+  return (
+    state.customVehicles.find((v) => v.id === state.selectedVehicleId) ??
+    PRESET_VEHICLES.find((v) => v.id === state.selectedVehicleId) ??
+    PRESET_VEHICLES[0]
+  );
 }
 
 function savedRouteToCandidate(route: SavedRoute): RouteCandidate {
@@ -241,8 +271,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   flyToTarget: null,
 
   savedRoutes: CURATED_DF_ROUTES,
+  savedPlaces: [],
   hazards: [],
-  exploreTab: 'discover',
+  exploreTab: 'routes',
 
   nav: {
     isTracking: false,
@@ -264,13 +295,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
   menuOpen: false,
   hazardPickerOpen: false,
   pendingHazardCoords: null,
+  pendingSavePlace: null,
   toasts: [],
 
   async bootstrap() {
     if (get().initialized) return;
-    const [prefs, userRoutes, customVehicles, hazards] = await Promise.all([
+    const [prefs, userRoutes, savedPlaces, customVehicles, hazards] = await Promise.all([
       indexedDbStorage.getPreferences(),
       indexedDbStorage.getSavedRoutes(),
+      indexedDbStorage.getSavedPlaces(),
       indexedDbStorage.getCustomVehicles(),
       indexedDbStorage.getHazards(),
     ]);
@@ -281,6 +314,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Merge user saved routes with curated routes (user edits override curated IDs)
     const userIds = new Set(userRoutes.map((r) => r.id));
     const mergedRoutes = [...userRoutes, ...CURATED_DF_ROUTES.filter((c) => !userIds.has(c.id))];
+
+    const homeSaved = savedPlaces.find((p) => p.category === 'home');
+    const workSaved = savedPlaces.find((p) => p.category === 'work');
 
     set({
       initialized: true,
@@ -293,10 +329,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
       showBikeLanes: prefs.showBikeLanes ?? true,
       showPois: prefs.showPois ?? true,
       showHazards: prefs.showHazards ?? true,
-      homePlace: prefs.homePlace,
-      workPlace: prefs.workPlace,
+      homePlace: homeSaved
+        ? { id: homeSaved.id, name: homeSaved.label, subtitle: homeSaved.address, coords: homeSaved.coords, source: 'curated' }
+        : prefs.homePlace,
+      workPlace: workSaved
+        ? { id: workSaved.id, name: workSaved.label, subtitle: workSaved.address, coords: workSaved.coords, source: 'curated' }
+        : prefs.workPlace,
       customVehicles,
       savedRoutes: mergedRoutes,
+      savedPlaces,
       hazards,
     });
 
@@ -555,7 +596,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ origin: place });
       if (get().destination) await get().recalculateRoute();
     } else if (target === 'dest') {
-      get().setDestination(place, true);
+      await get().setDestination(place, true);
+    } else if (target === 'save_place' || target === 'save_home' || target === 'save_work') {
+      const cat: SavedPlaceCategory =
+        target === 'save_home' ? 'home' : target === 'save_work' ? 'work' : 'favorite';
+      set({ pendingSavePlace: { place, defaultCategory: cat } });
     }
   },
 
@@ -705,6 +750,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
     get().pushToast('Rota salva no dispositivo', route.name, 'emerald');
   },
 
+  async renameSavedRoute(id, newName) {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const route = get().savedRoutes.find((r) => r.id === id);
+    if (!route) return;
+    const updated: SavedRoute = { ...route, name: trimmed, updatedAt: new Date().toISOString() };
+    await indexedDbStorage.saveRoute(updated);
+    set((s) => ({
+      savedRoutes: s.savedRoutes.map((r) => (r.id === id ? updated : r)),
+    }));
+    get().pushToast('Rota renomeada', trimmed, 'emerald');
+  },
+
   async deleteSavedRoute(id) {
     await indexedDbStorage.deleteRoute(id);
     set((s) => ({ savedRoutes: s.savedRoutes.filter((r) => r.id !== id) }));
@@ -728,10 +786,148 @@ export const useAppStore = create<AppStore>((set, get) => ({
     get().pushToast('Rota importada com sucesso!', `${route.name} (${route.distanceKm} km)`, 'emerald');
   },
 
-  setHomeOrWork(slot, place) {
-    set(slot === 'home' ? { homePlace: place } : { workPlace: place });
+  openSavePlacePrompt(place, defaultCategory = 'favorite') {
+    set({ pendingSavePlace: { place, defaultCategory } });
+  },
+
+  closeSavePlacePrompt() {
+    set({ pendingSavePlace: null });
+  },
+
+  async saveFavoritePlace(place, label, category) {
+    const cleanLabel =
+      label.trim() ||
+      (category === 'home' ? 'Casa' : category === 'work' ? 'Trabalho' : place.name);
+    const now = new Date().toISOString();
+    const existing = get().savedPlaces;
+
+    // If saving as Home or Work, replace any previous default Home/Work slot cleanly
+    let nextPlaces = [...existing];
+    if (category === 'home' || category === 'work') {
+      const prevSlot = existing.find((p) => p.category === category);
+      if (prevSlot) {
+        await indexedDbStorage.deletePlace(prevSlot.id);
+        nextPlaces = nextPlaces.filter((p) => p.id !== prevSlot.id);
+      }
+    }
+
+    const newPlace: SavedPlace = {
+      id: `place-${category}-${Date.now()}`,
+      label: cleanLabel,
+      address: place.subtitle || place.name,
+      coords: place.coords,
+      category,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await indexedDbStorage.savePlace(newPlace);
+    nextPlaces = [newPlace, ...nextPlaces];
+
+    const slotPlace: PlaceResult = {
+      id: newPlace.id,
+      name: newPlace.label,
+      subtitle: newPlace.address,
+      coords: newPlace.coords,
+      source: 'curated',
+    };
+
+    set((s) => ({
+      savedPlaces: nextPlaces,
+      pendingSavePlace: null,
+      homePlace: category === 'home' ? slotPlace : s.homePlace,
+      workPlace: category === 'work' ? slotPlace : s.workPlace,
+    }));
     persistPrefs(get());
-    get().pushToast(slot === 'home' ? 'Casa salva' : 'Trabalho salvo', place.name, 'emerald');
+
+    const toastTitle =
+      category === 'home'
+        ? 'Endereço de Casa salvo!'
+        : category === 'work'
+          ? 'Endereço de Trabalho salvo!'
+          : 'Local salvo em Meus Locais!';
+    get().pushToast(toastTitle, cleanLabel, 'emerald');
+  },
+
+  async renameSavedPlace(id, newLabel) {
+    const trimmed = newLabel.trim();
+    if (!trimmed) return;
+    const target = get().savedPlaces.find((p) => p.id === id);
+    if (!target) return;
+    const updated: SavedPlace = { ...target, label: trimmed, updatedAt: new Date().toISOString() };
+    await indexedDbStorage.savePlace(updated);
+
+    const slotPlace: PlaceResult = {
+      id: updated.id,
+      name: updated.label,
+      subtitle: updated.address,
+      coords: updated.coords,
+      source: 'curated',
+    };
+
+    set((s) => ({
+      savedPlaces: s.savedPlaces.map((p) => (p.id === id ? updated : p)),
+      homePlace: updated.category === 'home' ? slotPlace : s.homePlace,
+      workPlace: updated.category === 'work' ? slotPlace : s.workPlace,
+    }));
+    persistPrefs(get());
+    get().pushToast('Local renomeado', trimmed, 'emerald');
+  },
+
+  async updateSavedPlaceCategory(id, category) {
+    const target = get().savedPlaces.find((p) => p.id === id);
+    if (!target) return;
+    const now = new Date().toISOString();
+    let list = [...get().savedPlaces];
+
+    // Demote any existing Home/Work to favorite so no place is lost
+    if (category === 'home' || category === 'work') {
+      const prev = list.find((p) => p.category === category && p.id !== id);
+      if (prev) {
+        const demoted: SavedPlace = { ...prev, category: 'favorite', updatedAt: now };
+        await indexedDbStorage.savePlace(demoted);
+        list = list.map((p) => (p.id === prev.id ? demoted : p));
+      }
+    }
+
+    const updated: SavedPlace = { ...target, category, updatedAt: now };
+    await indexedDbStorage.savePlace(updated);
+    list = list.map((p) => (p.id === id ? updated : p));
+
+    const homeSaved = list.find((p) => p.category === 'home');
+    const workSaved = list.find((p) => p.category === 'work');
+
+    set({
+      savedPlaces: list,
+      homePlace: homeSaved
+        ? { id: homeSaved.id, name: homeSaved.label, subtitle: homeSaved.address, coords: homeSaved.coords, source: 'curated' }
+        : undefined,
+      workPlace: workSaved
+        ? { id: workSaved.id, name: workSaved.label, subtitle: workSaved.address, coords: workSaved.coords, source: 'curated' }
+        : undefined,
+    });
+    persistPrefs(get());
+    get().pushToast(
+      category === 'home' ? 'Definido como Casa' : category === 'work' ? 'Definido como Trabalho' : 'Movido para Favoritos',
+      updated.label,
+      'emerald'
+    );
+  },
+
+  async deleteSavedPlace(id) {
+    const target = get().savedPlaces.find((p) => p.id === id);
+    await indexedDbStorage.deletePlace(id);
+    set((s) => ({
+      savedPlaces: s.savedPlaces.filter((p) => p.id !== id),
+      homePlace: target?.category === 'home' ? undefined : s.homePlace,
+      workPlace: target?.category === 'work' ? undefined : s.workPlace,
+    }));
+    persistPrefs(get());
+    get().pushToast('Local removido', target?.label, 'slate');
+  },
+
+  setHomeOrWork(slot, place) {
+    void get().saveFavoritePlace(place, slot === 'home' ? 'Casa' : 'Trabalho', slot);
   },
 
   setHoverCoordIndex(idx) {

@@ -8,12 +8,13 @@ import {
   Moon,
   Satellite,
   ShoppingBag,
+  Star,
   Sun,
   X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 import { hasMapTilerKey, hasOrsKey } from '../../config/providers';
-import { useAppStore } from '../../store/useAppStore';
+import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
 
 export function AppMenuDrawer() {
   const open = useAppStore((s) => s.menuOpen);
@@ -30,13 +31,12 @@ export function AppMenuDrawer() {
   const showPois = useAppStore((s) => s.showPois);
   const showHazards = useAppStore((s) => s.showHazards);
   const toggleLayer = useAppStore((s) => s.toggleLayer);
-  const getActiveVehicle = useAppStore((s) => s.getActiveVehicle);
+  const activeVehicle = useAppStore(selectActiveVehicle);
   const savedRoutes = useAppStore((s) => s.savedRoutes);
+  const savedPlaces = useAppStore((s) => s.savedPlaces);
   const hazards = useAppStore((s) => s.hazards);
 
   if (!open) return null;
-
-  const activeVehicle = getActiveVehicle();
 
   return (
     <div className="fixed inset-0 z-50 flex bg-slate-950/55 backdrop-blur-xs" onClick={() => setMenuOpen(false)}>
@@ -89,14 +89,30 @@ export function AppMenuDrawer() {
               onClick={() => {
                 setMenuOpen(false);
                 clearActiveRoute();
-                setExploreTab('saved');
+                setExploreTab('routes');
               }}
               className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <Bookmark className="h-4.5 w-4.5 text-emerald-600" />
-              <span className="flex-1 text-sm font-semibold">Minhas Rotas Salvas</span>
+              <span className="flex-1 text-sm font-semibold">Rotas</span>
               <span className="font-mono-num rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {savedRoutes.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                clearActiveRoute();
+                setExploreTab('places');
+              }}
+              className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Star className="h-4.5 w-4.5 text-amber-500" />
+              <span className="flex-1 text-sm font-semibold">Meus Locais</span>
+              <span className="font-mono-num rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {savedPlaces.length}
               </span>
             </button>
 

@@ -19,6 +19,7 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  Star,
   X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
@@ -26,7 +27,7 @@ import { formatDurationPtBR } from '../../engine/geo';
 import { downloadTextFile, encodeShareableRouteUrl, exportRouteToGpx } from '../../engine/gpx';
 import { searchPlaces } from '../../engine/routing';
 import { computeRouteTelemetry } from '../../engine/telemetry';
-import { useAppStore } from '../../store/useAppStore';
+import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
 import type { PlaceResult } from '../../types';
 import { ElevationProfile } from './ElevationProfile';
 
@@ -51,13 +52,14 @@ export function RoutePreviewPanel() {
   const setOrigin = useAppStore((s) => s.setOrigin);
   const setDestination = useAppStore((s) => s.setDestination);
   const useCurrentLocationAsOrigin = useAppStore((s) => s.useCurrentLocationAsOrigin);
+  const openSavePlacePrompt = useAppStore((s) => s.openSavePlacePrompt);
   const setMapPickTarget = useAppStore((s) => s.setMapPickTarget);
   const clearActiveRoute = useAppStore((s) => s.clearActiveRoute);
   const startNavigation = useAppStore((s) => s.startNavigation);
   const saveCurrentRoute = useAppStore((s) => s.saveCurrentRoute);
   const isRoundTrip = useAppStore((s) => s.isRoundTrip);
   const toggleRoundTrip = useAppStore((s) => s.toggleRoundTrip);
-  const getActiveVehicle = useAppStore((s) => s.getActiveVehicle);
+  const activeVehicle = useAppStore(selectActiveVehicle);
   const selectedModeIndex = useAppStore((s) => s.selectedModeIndex);
   const setModeIndex = useAppStore((s) => s.setModeIndex);
   const riderWeightKg = useAppStore((s) => s.riderWeightKg);
@@ -65,7 +67,6 @@ export function RoutePreviewPanel() {
   const navPos = useAppStore((s) => s.nav.currentPos);
   const pushToast = useAppStore((s) => s.pushToast);
 
-  const activeVehicle = getActiveVehicle();
   const activeRoute = candidates[selectedCandidateIdx];
 
   useEffect(() => {
@@ -167,25 +168,39 @@ export function RoutePreviewPanel() {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setEditingEndpoint(editingEndpoint === 'dest' ? null : 'dest');
-              setEndpointQuery('');
-            }}
-            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-xs transition-colors ${
-              editingEndpoint === 'dest'
-                ? 'border-sky-500 bg-sky-50/70 dark:bg-sky-950/30'
-                : 'border-slate-200 bg-white hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800/90'
-            }`}
-          >
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[9px] font-extrabold text-white dark:bg-sky-500">
-              B
-            </span>
-            <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
-              {destination?.name || 'Destino'}
-            </span>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingEndpoint(editingEndpoint === 'dest' ? null : 'dest');
+                setEndpointQuery('');
+              }}
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-xs transition-colors ${
+                editingEndpoint === 'dest'
+                  ? 'border-sky-500 bg-sky-50/70 dark:bg-sky-950/30'
+                  : 'border-slate-200 bg-white hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800/90'
+              }`}
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[9px] font-extrabold text-white dark:bg-sky-500">
+                B
+              </span>
+              <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                {destination?.name || 'Destino'}
+              </span>
+            </button>
+
+            {destination && (
+              <button
+                type="button"
+                onClick={() => openSavePlacePrompt(destination, 'favorite')}
+                title="Salvar destino em Meus Locais"
+                aria-label="Salvar destino em Meus Locais"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-amber-500 hover:border-amber-500/50 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-amber-950/40"
+              >
+                <Star className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         <button

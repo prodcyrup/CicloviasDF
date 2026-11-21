@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 import { useFullscreen } from '../../hooks/useFullscreen';
-import { useAppStore } from '../../store/useAppStore';
+import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
 import { RoutePreviewPanel } from '../planner/RoutePreviewPanel';
 import { ExplorePanel } from '../search/ExplorePanel';
 
@@ -52,7 +52,7 @@ export function AdaptiveShell() {
   const basemap = useAppStore((s) => s.basemap);
   const showBikeLanes = useAppStore((s) => s.showBikeLanes);
   const mapPickTarget = useAppStore((s) => s.mapPickTarget);
-  const getActiveVehicle = useAppStore((s) => s.getActiveVehicle);
+  const activeVehicle = useAppStore(selectActiveVehicle);
 
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const toggleBasemap = useAppStore((s) => s.toggleBasemap);
@@ -64,7 +64,6 @@ export function AdaptiveShell() {
   const flyTo = useAppStore((s) => s.flyTo);
   const locateCurrentPosition = useAppStore((s) => s.locateCurrentPosition);
 
-  const activeVehicle = getActiveVehicle();
   const compactVehicleLabel = activeVehicle.name.split(' ')[0];
 
   const handleLocateMe = async () => {
@@ -81,6 +80,9 @@ export function AdaptiveShell() {
     dest: 'Toque no mapa para escolher o destino',
     via: 'Toque no mapa para adicionar uma parada',
     hazard: 'Toque no mapa onde está o perigo',
+    save_place: 'Toque no mapa para salvar um local favorito',
+    save_home: 'Toque no mapa para definir sua Casa',
+    save_work: 'Toque no mapa para definir seu Trabalho',
   };
 
   // Finger-responsive pointer drag handlers for the mobile bottom sheet handle
@@ -232,41 +234,41 @@ export function AdaptiveShell() {
         </div>
       </header>
 
-      {/* DESKTOP FLOATING LEFT SIDEBAR */}
-      <aside className="glass-panel fixed bottom-4 left-4 top-4 z-20 hidden w-[410px] flex-col overflow-hidden rounded-3xl shadow-2xl lg:flex">
+      {/* DESKTOP FLOATING LEFT SIDEBAR — balanced header so icons never clip */}
+      <aside className="glass-panel fixed bottom-4 left-4 top-4 z-20 hidden w-[416px] flex-col overflow-hidden rounded-3xl shadow-2xl lg:flex">
         {/* Desktop Top Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 px-4 py-3.5 dark:border-slate-800/80">
-          <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 px-3.5 py-3 dark:border-slate-800/80">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
               aria-label="Menu"
-              className="rounded-xl p-1.5 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="shrink-0 rounded-xl p-1.5 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               <Menu className="h-5 w-5" />
             </button>
             <img
               src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
               alt={BRAND.name}
-              className="h-8 w-8 rounded-xl shadow-xs"
+              className="h-7.5 w-7.5 shrink-0 rounded-xl shadow-xs"
             />
-            <div>
-              <h1 className="font-display whitespace-nowrap text-base font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white">
+            <div className="min-w-0">
+              <h1 className="font-display truncate text-sm font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white">
                 {BRAND.name}
               </h1>
-              <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                {BRAND.tagline}
+              <p className="truncate text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                Ciclovias &amp; Mobilidade
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <button
               id="eixoverde-garage-btn"
               type="button"
               onClick={() => setGarageOpen(true)}
-              title="Minha Garagem — escolher ou cadastrar veículo"
-              className="flex max-w-[110px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 transition-colors hover:border-emerald-500/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              title={`Minha Garagem: ${activeVehicle.name}`}
+              className="flex max-w-[100px] items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 transition-colors hover:border-emerald-500/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               {activeVehicle.isElectric ? (
                 <Zap className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -280,7 +282,7 @@ export function AdaptiveShell() {
               type="button"
               onClick={() => void toggleFullscreen()}
               title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-              className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
@@ -289,7 +291,7 @@ export function AdaptiveShell() {
               type="button"
               onClick={toggleTheme}
               title="Alternar tema claro / escuro"
-              className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}
             </button>

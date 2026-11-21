@@ -22,6 +22,7 @@ export function EixoVerdeMap() {
   const waypointMarkersRef = useRef<maplibregl.Marker[]>([]);
   const crossingMarkersRef = useRef<maplibregl.Marker[]>([]);
   const hazardMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const savedPlaceMarkersRef = useRef<maplibregl.Marker[]>([]);
   const gpsMarkerRef = useRef<maplibregl.Marker | null>(null);
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
 
@@ -36,6 +37,7 @@ export function EixoVerdeMap() {
   const isEditingWaypoints = useAppStore((s) => s.isEditingWaypoints);
   const mapPickTarget = useAppStore((s) => s.mapPickTarget);
   const hazards = useAppStore((s) => s.hazards);
+  const savedPlaces = useAppStore((s) => s.savedPlaces);
   const hoverCoordIndex = useAppStore((s) => s.hoverCoordIndex);
   const fitBoundsNonce = useAppStore((s) => s.fitBoundsNonce);
   const flyToTarget = useAppStore((s) => s.flyToTarget);
@@ -596,6 +598,37 @@ export function EixoVerdeMap() {
       hazardMarkersRef.current.push(marker);
     });
   }, [hazards, showHazards]);
+
+  // Render Saved Places (Casa, Trabalho, Favoritos) pins on map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    savedPlaceMarkersRef.current.forEach((m) => m.remove());
+    savedPlaceMarkersRef.current = [];
+    if (mode === 'navigate') return;
+
+    savedPlaces.forEach((sp) => {
+      const bg = sp.category === 'home' ? '#059669' : sp.category === 'work' ? '#0284c7' : '#d97706';
+      const icon = sp.category === 'home' ? '🏠' : sp.category === 'work' ? '💼' : '⭐';
+      const el = document.createElement('div');
+      el.innerHTML = `<div style="display:flex;align-items:center;gap:4px;background:${bg};color:#fff;font-family:Inter,sans-serif;font-size:11px;font-weight:700;padding:3px 8px 3px 6px;border-radius:999px;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.28);cursor:pointer;white-space:nowrap"><span>${icon}</span><span>${sp.label.slice(0, 18)}</span></div>`;
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        void useAppStore.getState().setDestination(
+          {
+            id: sp.id,
+            name: sp.label,
+            subtitle: sp.address,
+            coords: sp.coords,
+            source: 'curated',
+          },
+          true
+        );
+      });
+      const marker = new maplibregl.Marker({ element: el }).setLngLat(sp.coords).addTo(map);
+      savedPlaceMarkersRef.current.push(marker);
+    });
+  }, [savedPlaces, mode]);
 
   // Elevation chart hover synced marker
   useEffect(() => {
