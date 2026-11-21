@@ -1,5 +1,6 @@
 import type {
   HazardReport,
+  RideSession,
   SavedPlace,
   SavedRoute,
   UserPreferences,
@@ -123,6 +124,30 @@ export const repository: UnifiedRepository = {
   async deleteHazard(id: string) {
     await indexedDbStorage.deleteHazard(id);
     await syncEngine.enqueueMutation('hazard_reports', id, 'delete');
+  },
+
+  async getRideSessions() {
+    return indexedDbStorage.getRideSessions();
+  },
+  async saveRideSession(ride: RideSession) {
+    const now = new Date().toISOString();
+    const enriched: RideSession = {
+      ...ride,
+      createdAt: ride.createdAt || now,
+      updatedAt: ride.updatedAt || now,
+    };
+    await indexedDbStorage.saveRideSession(enriched);
+    await syncEngine.enqueueMutation(
+      'ride_sessions',
+      enriched.id,
+      'upsert',
+      enriched,
+      enriched.updatedAt
+    );
+  },
+  async deleteRideSession(id: string) {
+    await indexedDbStorage.deleteRideSession(id);
+    await syncEngine.enqueueMutation('ride_sessions', id, 'delete');
   },
 
   async getPreferences() {

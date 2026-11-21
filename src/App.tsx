@@ -32,6 +32,9 @@ const SavePlaceModal = lazy(() =>
 const AppMenuDrawer = lazy(() =>
   import('./components/sheet/AppMenuDrawer').then((m) => ({ default: m.AppMenuDrawer }))
 );
+const RideSummaryModal = lazy(() =>
+  import('./components/rides/RideSummaryModal').then((m) => ({ default: m.RideSummaryModal }))
+);
 
 export function App() {
   const bootstrap = useAppStore((s) => s.bootstrap);
@@ -44,6 +47,7 @@ export function App() {
   const mapContextPin = useAppStore((s) => s.mapContextPin);
   const authModalOpen = useAppStore((s) => s.authModalOpen);
   const migrationPromptOpen = useAppStore((s) => s.migrationPromptOpen);
+  const pendingRideSummary = useAppStore((s) => s.pendingRideSummary);
 
   useEffect(() => {
     void bootstrap();
@@ -73,6 +77,7 @@ export function App() {
         {pendingSavePlace && <SavePlaceModal />}
         {authModalOpen && <AuthModal />}
         {migrationPromptOpen && <MigrationPromptModal />}
+        {pendingRideSummary && <RideSummaryModal />}
       </Suspense>
 
       <ToastStack />

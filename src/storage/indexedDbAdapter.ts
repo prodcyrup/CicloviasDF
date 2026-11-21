@@ -1,5 +1,6 @@
 import type {
   HazardReport,
+  RideSession,
   SavedPlace,
   SavedRoute,
   SyncOutboxItem,
@@ -10,12 +11,13 @@ import type {
 import type { StorageAdapter } from './adapter';
 
 export const DB_NAME = 'eixoverde_db_v1';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 export const STORES = {
   routes: 'saved_routes',
   places: 'saved_places',
   vehicles: 'custom_vehicles',
   hazards: 'hazard_reports',
+  rides: 'ride_sessions',
   meta: 'user_meta',
   outbox: 'sync_outbox',
   tombstones: 'sync_tombstones',
@@ -29,6 +31,7 @@ const memoryStores: Record<string, Map<string, unknown>> = {
   [STORES.places]: new Map(),
   [STORES.vehicles]: new Map(),
   [STORES.hazards]: new Map(),
+  [STORES.rides]: new Map(),
   [STORES.meta]: new Map(),
   [STORES.outbox]: new Map(),
   [STORES.tombstones]: new Map(),
@@ -61,6 +64,9 @@ function openDB(): Promise<IDBDatabase> {
         }
         if (!db.objectStoreNames.contains(STORES.hazards)) {
           db.createObjectStore(STORES.hazards, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(STORES.rides)) {
+          db.createObjectStore(STORES.rides, { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains(STORES.meta)) {
           db.createObjectStore(STORES.meta);
@@ -241,6 +247,23 @@ export const indexedDbStorage: ExtendedIndexedDbStorage = {
   },
   async deleteHazard(id) {
     await removeItem(STORES.hazards, id);
+  },
+
+  async getRideSessions() {
+    const items = await getAll<RideSession>(STORES.rides);
+    return items.sort((a, b) => (b.startedAt || b.createdAt || '').localeCompare(a.startedAt || a.createdAt || ''));
+  },
+  async saveRideSession(ride) {
+    const now = new Date().toISOString();
+    const enriched: RideSession = {
+      ...ride,
+      createdAt: ride.createdAt || now,
+      updatedAt: ride.updatedAt || now,
+    };
+    await putItem(STORES.rides, enriched);
+  },
+  async deleteRideSession(id) {
+    await removeItem(STORES.rides, id);
   },
 
   async getPreferences() {

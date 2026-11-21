@@ -5,7 +5,13 @@ import {
   ArrowUpDown,
   BatteryCharging,
   Bookmark,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudSun,
   Download,
+  Droplets,
   Edit3,
   Flame,
   Leaf,
@@ -19,7 +25,10 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  Sparkles,
   Star,
+  Sun,
+  Wind,
   X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
@@ -27,9 +36,27 @@ import { formatDurationPtBR } from '../../engine/geo';
 import { downloadTextFile, encodeShareableRouteUrl, exportRouteToGpx } from '../../engine/gpx';
 import { searchPlaces } from '../../engine/routing';
 import { computeRouteTelemetry } from '../../engine/telemetry';
+import { computeRouteMainBearingDeg } from '../../engine/weather';
 import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
-import type { PlaceResult } from '../../types';
+import type { PlaceResult, WeatherIconKind } from '../../types';
 import { ElevationProfile } from './ElevationProfile';
+
+function WeatherGlyph({ kind }: { kind: WeatherIconKind }) {
+  switch (kind) {
+    case 'sun':
+      return <Sun className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+    case 'partly_cloudy':
+      return <CloudSun className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+    case 'rain':
+      return <CloudDrizzle className="h-3.5 w-3.5 shrink-0 text-sky-500" />;
+    case 'storm':
+      return <CloudLightning className="h-3.5 w-3.5 shrink-0 text-rose-500" />;
+    case 'fog':
+      return <CloudFog className="h-3.5 w-3.5 shrink-0 text-slate-400" />;
+    default:
+      return <Cloud className="h-3.5 w-3.5 shrink-0 text-slate-400" />;
+  }
+}
 
 export function RoutePreviewPanel() {
   const [savingName, setSavingName] = useState(false);
@@ -63,11 +90,14 @@ export function RoutePreviewPanel() {
   const selectedModeIndex = useAppStore((s) => s.selectedModeIndex);
   const setModeIndex = useAppStore((s) => s.setModeIndex);
   const riderWeightKg = useAppStore((s) => s.riderWeightKg);
+  const weather = useAppStore((s) => s.weather);
+  const batteryCalibrations = useAppStore((s) => s.batteryCalibrations);
   const setGarageOpen = useAppStore((s) => s.setGarageOpen);
   const navPos = useAppStore((s) => s.nav.currentPos);
   const pushToast = useAppStore((s) => s.pushToast);
 
   const activeRoute = candidates[selectedCandidateIdx];
+  const activeCalibration = batteryCalibrations[activeVehicle.id] ?? null;
 
   useEffect(() => {
     if (!editingEndpoint) return;
@@ -304,7 +334,11 @@ export function RoutePreviewPanel() {
           {candidates.length > 1 && (
             <div className="grid grid-cols-3 gap-1.5">
               {candidates.map((cand, idx) => {
-                const t = computeRouteTelemetry(cand, activeVehicle, selectedModeIndex, riderWeightKg, isRoundTrip);
+                const t = computeRouteTelemetry(cand, activeVehicle, selectedModeIndex, riderWeightKg, isRoundTrip, {
+                  weather,
+                  routeBearingDeg: computeRouteMainBearingDeg(cand.coords),
+                  calibration: activeCalibration,
+                });
                 const selected = idx === selectedCandidateIdx;
                 const shortLabel =
                   cand.profile === 'safe' ? 'Segura' : cand.profile === 'balanced' ? 'Equilibrada' : 'Rápida';
@@ -453,12 +487,18 @@ export function RoutePreviewPanel() {
 
           {/* Active Route Telemetry Hero Card */}
           {(() => {
+            const routeBearingDeg = computeRouteMainBearingDeg(activeRoute.coords);
             const telemetry = computeRouteTelemetry(
               activeRoute,
               activeVehicle,
               selectedModeIndex,
               riderWeightKg,
-              isRoundTrip
+              isRoundTrip,
+              {
+                weather,
+                routeBearingDeg,
+                calibration: activeCalibration,
+              }
             );
             const activeMode = activeVehicle.modes[selectedModeIndex] ?? activeVehicle.modes[0];
 
@@ -493,6 +533,28 @@ export function RoutePreviewPanel() {
                   </button>
                 </div>
 
+                {/* Live Open-Meteo Weather & Wind Vector Strip */}
+                {weather && (
+                  <div
+                    id="eixoverde-weather-pill"
+                    className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700/70 dark:bg-slate-900/55 dark:text-slate-200"
+                  >
+                    <span className="inline-flex items-center gap-1 font-bold">
+                      <WeatherGlyph kind={weather.icon} />
+                      <span className="font-mono-num">{weather.temperatureC}°C</span>
+                      <span className="text-slate-500 dark:text-slate-400">• {weather.label}</span>
+                    </span>
+                    <span className="font-mono-num inline-flex items-center gap-1 text-sky-600 dark:text-sky-400">
+                      <Droplets className="h-3 w-3 shrink-0" />
+                      {weather.rainProbabilityPct}%
+                    </span>
+                    <span className="font-mono-num inline-flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                      <Wind className="h-3 w-3 shrink-0" />
+                      {telemetry.windEffectLabel || `${weather.windSpeedKmh} km/h`}
+                    </span>
+                  </div>
+                )}
+
                 {/* Primary Navigation Launch CTA */}
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -518,13 +580,24 @@ export function RoutePreviewPanel() {
                 {/* Vehicle Quick Switcher & Mode Pills */}
                 <div className="rounded-xl bg-slate-100/80 p-2.5 dark:bg-slate-900/60">
                   <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGarageOpen(true)}
-                      className="truncate text-left text-xs font-bold text-slate-800 hover:text-emerald-600 dark:text-slate-100 dark:hover:text-emerald-400"
-                    >
-                      {activeVehicle.name}
-                    </button>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setGarageOpen(true)}
+                        className="truncate text-left text-xs font-bold text-slate-800 hover:text-emerald-600 dark:text-slate-100 dark:hover:text-emerald-400"
+                      >
+                        {activeVehicle.name}
+                      </button>
+                      {telemetry.calibrationApplied && (
+                        <span
+                          title={`Autonomia calibrada em ${Math.round((telemetry.calibrationMultiplier ?? 1) * 100)}% com base nos seus pedais reais`}
+                          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-700 dark:text-emerald-300"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" />
+                          Calibrada
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => setGarageOpen(true)}
@@ -600,6 +673,17 @@ export function RoutePreviewPanel() {
                     </div>
                   </div>
                 </div>
+
+                {/* Live Weather Safety Warning (rain / wet ciclovia / gusts / low humidity / UV) */}
+                {telemetry.weatherWarning && (
+                  <div
+                    id="eixoverde-weather-warning"
+                    className="flex items-start gap-2 rounded-xl bg-sky-500/12 px-3 py-2 text-xs font-medium text-sky-900 dark:text-sky-200"
+                  >
+                    <CloudDrizzle className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+                    <span>{telemetry.weatherWarning}</span>
+                  </div>
+                )}
 
                 {/* Vehicle-specific Comfort / Battery Warning */}
                 {telemetry.comfortWarning && (

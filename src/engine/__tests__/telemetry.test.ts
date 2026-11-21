@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PRESET_VEHICLES } from '../../data/vehicles';
-import { computeRouteTelemetry } from '../telemetry';
+import type { WeatherSnapshot } from '../../types';
+import { computeRouteTelemetry, computeUpdatedBatteryCalibration } from '../telemetry';
 
 const sampleRoute = {
   distanceKm: 7.91,
@@ -96,5 +97,65 @@ describe('telemetry.ts vehicle & battery model', () => {
     expect(t.batteryUsedPct).toBe(0);
     expect(t.batteryLeftPct).toBe(100);
     expect(t.caloriesKcal).toBeGreaterThan(200);
+  });
+
+  it('adjusts ETA and electric range for headwind/tailwind and learned battery calibration', () => {
+    const windyNorth: WeatherSnapshot = {
+      fetchedAt: '2026-11-21T12:00:00Z',
+      coords: [-47.88, -15.79],
+      temperatureC: 26,
+      apparentTempC: 26,
+      humidityPct: 50,
+      precipitationMm: 0,
+      rainProbabilityPct: 10,
+      windSpeedKmh: 22,
+      windGustsKmh: 26,
+      windDirectionDeg: 0, // blowing from North
+      uvIndex: 5,
+      weatherCode: 0,
+      label: 'Céu limpo',
+      icon: 'sun',
+      isDay: true,
+    };
+
+    const calm = computeRouteTelemetry(sampleRoute, jet, 1, 75, false);
+    const headwind = computeRouteTelemetry(sampleRoute, jet, 1, 75, false, {
+      weather: windyNorth,
+      routeBearingDeg: 0,
+    });
+    const tailwind = computeRouteTelemetry(sampleRoute, jet, 1, 75, false, {
+      weather: windyNorth,
+      routeBearingDeg: 180,
+    });
+
+    expect(headwind.realRangeKm).toBeLessThan(calm.realRangeKm);
+    expect(headwind.oneWayMin).toBeGreaterThanOrEqual(calm.oneWayMin);
+    expect(tailwind.realRangeKm).toBeGreaterThan(calm.realRangeKm);
+
+    // Learned calibration: user actually burned 30% instead of nominal 20% -> lower efficiency multiplier
+    const cal1 = computeUpdatedBatteryCalibration({
+      vehicleId: jet.id,
+      distanceKm: 7.91,
+      actualBatteryUsedPct: 30,
+      nominalEstimatedBatteryUsedPct: 20,
+    });
+    expect(cal1).not.toBeNull();
+    expect(cal1!.efficiencyMultiplier).toBeLessThan(0.85);
+    expect(cal1!.sampleCount).toBe(1);
+
+    const calibratedTelemetry = computeRouteTelemetry(sampleRoute, jet, 1, 75, false, {
+      calibration: cal1,
+    });
+    expect(calibratedTelemetry.calibrationApplied).toBe(true);
+    expect(calibratedTelemetry.realRangeKm).toBeLessThan(calm.realRangeKm);
+
+    // Micro-trips (< 0.5 km) are ignored so noise doesn't corrupt calibration
+    const ignored = computeUpdatedBatteryCalibration({
+      vehicleId: jet.id,
+      distanceKm: 0.2,
+      actualBatteryUsedPct: 5,
+      nominalEstimatedBatteryUsedPct: 1,
+    });
+    expect(ignored).toBeNull();
   });
 });

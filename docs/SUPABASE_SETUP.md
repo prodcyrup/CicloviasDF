@@ -20,10 +20,11 @@ Siga este guia rápido (cerca de 5 minutos) para ativar **Contas na Nuvem**, **S
 1. No painel do Supabase, abra **SQL Editor** → **New query**.
 2. Copie todo o conteúdo do arquivo [`supabase/migrations/20261121000001_eixoverde_phase2.sql`](../supabase/migrations/20261121000001_eixoverde_phase2.sql) e cole no editor.
 3. Clique em **Run**.
+4. *(Fase 3 — Histórico de Pedais na Nuvem)* Repita os passos 1–3 com o arquivo [`supabase/migrations/20261121000002_eixoverde_phase3_rides.sql`](../supabase/migrations/20261121000002_eixoverde_phase3_rides.sql) para sincronizar o histórico **Meus Pedais** (`ride_sessions` com PostGIS `LineString` + RLS privado). Caso ainda não tenha rodado esta migração, o app salva seus pedais normalmente em IndexedDB e sincroniza automaticamente assim que a tabela existir.
 
 O script é **100% idempotente** (pode ser executado novamente sem erro) e cria automaticamente:
 - Extensão **PostGIS** no schema `extensions` (compatível com Supabase Cloud).
-- Tabelas com **Row Level Security (RLS)** habilitado: `profiles`, `saved_routes`, `saved_places`, `custom_vehicles`, `hazard_reports`, `hazard_confirmations` e `user_preferences`.
+- Tabelas com **Row Level Security (RLS)** habilitado: `profiles`, `saved_routes`, `saved_places`, `custom_vehicles`, `hazard_reports`, `hazard_confirmations`, `ride_sessions` e `user_preferences`.
 - Triggers automáticos de geometria (`LineString` e `Point` SRID 4326), contagem de confirmações de alertas e criação de perfil no cadastro.
 - Funções espaciais RPC `get_hazards_in_bounds(...)` (com índice GIST) e `confirm_hazard(...)`.
 

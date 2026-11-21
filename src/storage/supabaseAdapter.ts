@@ -4,6 +4,9 @@ import type {
   HazardKind,
   HazardReport,
   LngLat,
+  RideMode,
+  RideSession,
+  RideTrackPoint,
   RouteProfileId,
   SavedPlace,
   SavedPlaceCategory,
@@ -28,6 +31,18 @@ export class CloudSyncError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+export function isMissingTableError(err: { message?: string; code?: string; status?: number } | null): boolean {
+  if (!err) return false;
+  const code = (err.code || '').toUpperCase();
+  const msg = (err.message || '').toLowerCase();
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    err.status === 404 ||
+    (msg.includes('ride_sessions') && (msg.includes('does not exist') || msg.includes('schema cache') || msg.includes('not found')))
+  );
 }
 
 function throwFromSupabaseError(err: { message?: string; code?: string; status?: number } | null): never {
@@ -493,4 +508,175 @@ export const supabaseAdapter = {
 
     if (error) throwFromSupabaseError(error);
   },
+
+  async pullRideSessions(userId: string): Promise<CloudPullResult<RideSession>> {
+    const client = getSupabaseClient();
+    if (!client) return { active: [], deletedIds: [] };
+
+    const { data, error } = await client
+      .from('ride_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('started_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      // Graceful IndexedDB-only fallback when Phase 3 SQL migration hasn't been executed yet
+      if (isMissingTableError(error)) {
+        return { active: [], deletedIds: [] };
+      }
+      throwFromSupabaseError(error);
+    }
+
+    const rows = (data ?? []) as RideSessionRow[];
+    const active: RideSession[] = [];
+    const deletedIds: Array<{ id: string; deletedAt: string }> = [];
+
+    for (const row of rows) {
+      if (row.deleted_at) {
+        deletedIds.push({ id: row.id, deletedAt: row.deleted_at });
+      } else {
+        active.push(rowToRideSession(row));
+      }
+    }
+    return { active, deletedIds };
+  },
+
+  async upsertRideSession(userId: string, ride: RideSession): Promise<void> {
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const now = new Date().toISOString();
+    const payload = {
+      user_id: userId,
+      id: ride.id,
+      title: ride.title,
+      mode: ride.mode || 'guided',
+      is_demo: Boolean(ride.isDemo),
+      started_at: ride.startedAt || now,
+      ended_at: ride.endedAt || now,
+      moving_duration_sec: Math.max(0, Math.round(ride.movingDurationSec || 0)),
+      total_duration_sec: Math.max(0, Math.round(ride.totalDurationSec || 0)),
+      distance_km: Math.max(0, Number(ride.distanceKm) || 0),
+      avg_speed_kmh: Math.max(0, Number(ride.avgSpeedKmh) || 0),
+      max_speed_kmh: Math.max(0, Number(ride.maxSpeedKmh) || 0),
+      ascent_m: Math.max(0, Math.round(ride.ascentM || 0)),
+      descent_m: Math.max(0, Math.round(ride.descentM || 0)),
+      calories_kcal: Math.max(0, Math.round(ride.caloriesKcal || 0)),
+      co2_saved_kg: Math.max(0, Number(ride.co2SavedKg) || 0),
+      vehicle_id: ride.vehicleId,
+      vehicle_name: ride.vehicleName,
+      vehicle_mode_index: Math.max(0, Math.round(ride.vehicleModeIndex || 0)),
+      is_electric: Boolean(ride.isElectric),
+      battery_start_pct: typeof ride.batteryStartPct === 'number' ? Math.round(ride.batteryStartPct) : null,
+      battery_end_pct: typeof ride.batteryEndPct === 'number' ? Math.round(ride.batteryEndPct) : null,
+      battery_used_pct: typeof ride.batteryUsedPct === 'number' ? Math.round(ride.batteryUsedPct) : null,
+      estimated_battery_used_pct:
+        typeof ride.estimatedBatteryUsedPct === 'number' ? Math.round(ride.estimatedBatteryUsedPct) : null,
+      weather_summary: ride.weatherSummary ?? null,
+      route_id: ride.routeId ?? null,
+      origin_name: ride.originName ?? null,
+      dest_name: ride.destName ?? null,
+      track: Array.isArray(ride.track) ? ride.track : [],
+      created_at: ride.createdAt || now,
+      updated_at: ride.updatedAt || now,
+      deleted_at: null,
+    };
+
+    const { error } = await client
+      .from('ride_sessions')
+      .upsert(payload, { onConflict: 'user_id,id' });
+
+    if (error) {
+      if (isMissingTableError(error)) return;
+      throwFromSupabaseError(error);
+    }
+  },
+
+  async softDeleteRideSession(userId: string, id: string, deletedAt: string): Promise<void> {
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const { error } = await client
+      .from('ride_sessions')
+      .update({ deleted_at: deletedAt, updated_at: deletedAt })
+      .eq('user_id', userId)
+      .eq('id', id);
+
+    if (error) {
+      if (isMissingTableError(error)) return;
+      throwFromSupabaseError(error);
+    }
+  },
 };
+
+interface RideSessionRow {
+  user_id: string;
+  id: string;
+  title: string;
+  mode: RideMode;
+  is_demo: boolean;
+  started_at: string;
+  ended_at: string;
+  moving_duration_sec: number;
+  total_duration_sec: number;
+  distance_km: number;
+  avg_speed_kmh: number;
+  max_speed_kmh: number;
+  ascent_m: number;
+  descent_m: number;
+  calories_kcal: number;
+  co2_saved_kg: number;
+  vehicle_id: string;
+  vehicle_name: string;
+  vehicle_mode_index: number;
+  is_electric: boolean;
+  battery_start_pct: number | null;
+  battery_end_pct: number | null;
+  battery_used_pct: number | null;
+  estimated_battery_used_pct: number | null;
+  weather_summary: RideSession['weatherSummary'] | null;
+  route_id: string | null;
+  origin_name: string | null;
+  dest_name: string | null;
+  track: RideTrackPoint[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+function rowToRideSession(r: RideSessionRow): RideSession {
+  return {
+    id: r.id,
+    title: r.title,
+    mode: r.mode || 'guided',
+    isDemo: Boolean(r.is_demo),
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    movingDurationSec: Number(r.moving_duration_sec) || 0,
+    totalDurationSec: Number(r.total_duration_sec) || 0,
+    distanceKm: Number(r.distance_km) || 0,
+    avgSpeedKmh: Number(r.avg_speed_kmh) || 0,
+    maxSpeedKmh: Number(r.max_speed_kmh) || 0,
+    ascentM: Number(r.ascent_m) || 0,
+    descentM: Number(r.descent_m) || 0,
+    caloriesKcal: Number(r.calories_kcal) || 0,
+    co2SavedKg: Number(r.co2_saved_kg) || 0,
+    vehicleId: r.vehicle_id,
+    vehicleName: r.vehicle_name,
+    vehicleModeIndex: Number(r.vehicle_mode_index) || 0,
+    isElectric: Boolean(r.is_electric),
+    batteryStartPct: typeof r.battery_start_pct === 'number' ? r.battery_start_pct : undefined,
+    batteryEndPct: typeof r.battery_end_pct === 'number' ? r.battery_end_pct : undefined,
+    batteryUsedPct: typeof r.battery_used_pct === 'number' ? r.battery_used_pct : undefined,
+    estimatedBatteryUsedPct:
+      typeof r.estimated_battery_used_pct === 'number' ? r.estimated_battery_used_pct : undefined,
+    weatherSummary: r.weather_summary ?? undefined,
+    routeId: r.route_id ?? undefined,
+    originName: r.origin_name ?? undefined,
+    destName: r.dest_name ?? undefined,
+    track: Array.isArray(r.track) ? r.track : [],
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}

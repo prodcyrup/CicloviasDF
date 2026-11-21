@@ -1,4 +1,4 @@
-import { Bookmark, Bike, CloudUpload, MapPin, AlertTriangle, X } from 'lucide-react';
+import { Activity, Bookmark, Bike, CloudUpload, MapPin, AlertTriangle, X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 export function MigrationPromptModal() {
@@ -74,6 +74,14 @@ export function MigrationPromptModal() {
               <strong className="font-mono-num">{summary.hazards}</strong> alertas
             </span>
           </div>
+          {summary.rides > 0 && (
+            <div className="col-span-2 flex items-center gap-2 rounded-xl bg-slate-100/90 px-3 py-2 dark:bg-slate-800/80">
+              <Activity className="h-4 w-4 text-emerald-500" />
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                <strong className="font-mono-num">{summary.rides}</strong> pedais gravados
+              </span>
+            </div>
+          )}
         </div>
 
         <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">

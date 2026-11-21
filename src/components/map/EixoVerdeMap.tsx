@@ -11,6 +11,7 @@ const SRC_POIS = 'ev-ciclomapa-pois';
 const SRC_ALT_ROUTES = 'ev-alt-routes';
 const SRC_ACTIVE_ROUTE = 'ev-active-route';
 const SRC_COMPLETED_ROUTE = 'ev-completed-route';
+const SRC_RIDE_TRACK = 'ev-ride-track';
 
 export function EixoVerdeMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -23,6 +24,7 @@ export function EixoVerdeMap() {
   const crossingMarkersRef = useRef<maplibregl.Marker[]>([]);
   const hazardMarkersRef = useRef<maplibregl.Marker[]>([]);
   const savedPlaceMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const replayMarkersRef = useRef<maplibregl.Marker[]>([]);
   const contextPinMarkerRef = useRef<maplibregl.Marker | null>(null);
   const gpsMarkerRef = useRef<maplibregl.Marker | null>(null);
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -40,6 +42,9 @@ export function EixoVerdeMap() {
   const mapPickTarget = useAppStore((s) => s.mapPickTarget);
   const hazards = useAppStore((s) => s.hazards);
   const savedPlaces = useAppStore((s) => s.savedPlaces);
+  const rideSessions = useAppStore((s) => s.rideSessions);
+  const activeRide = useAppStore((s) => s.activeRide);
+  const replayingRideId = useAppStore((s) => s.replayingRideId);
   const mapContextPin = useAppStore((s) => s.mapContextPin);
   const hoverCoordIndex = useAppStore((s) => s.hoverCoordIndex);
   const fitBoundsNonce = useAppStore((s) => s.fitBoundsNonce);
@@ -71,6 +76,9 @@ export function EixoVerdeMap() {
     }
     if (!map.getSource(SRC_COMPLETED_ROUTE)) {
       map.addSource(SRC_COMPLETED_ROUTE, { type: 'geojson', data: emptyFC });
+    }
+    if (!map.getSource(SRC_RIDE_TRACK)) {
+      map.addSource(SRC_RIDE_TRACK, { type: 'geojson', data: emptyFC });
     }
 
     const laneVis = useAppStore.getState().showBikeLanes ? 'visible' : 'none';
@@ -252,18 +260,81 @@ export function EixoVerdeMap() {
         },
       });
     }
+
+    // 8. Recorded Free Ride breadcrumb & Meus Pedais map replay track
+    if (!map.getLayer('ev-ride-track-casing')) {
+      map.addLayer({
+        id: 'ev-ride-track-casing',
+        type: 'line',
+        source: SRC_RIDE_TRACK,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': isDark ? '#0c4a6e' : '#082f49',
+          'line-width': 10,
+          'line-opacity': 0.88,
+        },
+      });
+    }
+    if (!map.getLayer('ev-ride-track-line')) {
+      map.addLayer({
+        id: 'ev-ride-track-line',
+        type: 'line',
+        source: SRC_RIDE_TRACK,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#38bdf8',
+          'line-width': 5.5,
+          'line-opacity': 0.96,
+        },
+      });
+    }
   };
 
   // Sync route GeoJSON into MapLibre sources
   const syncRoutesToMap = (map: maplibregl.Map) => {
     if (!styleReadyRef.current) return;
     const state = useAppStore.getState();
-    const { candidates: cands, selectedCandidateIdx: selIdx, mode: curMode, nav: curNav } = state;
+    const {
+      candidates: cands,
+      selectedCandidateIdx: selIdx,
+      mode: curMode,
+      nav: curNav,
+      activeRide: curActiveRide,
+      rideSessions: curRides,
+      replayingRideId: curReplayId,
+    } = state;
 
     const altSrc = map.getSource(SRC_ALT_ROUTES) as maplibregl.GeoJSONSource | undefined;
     const actSrc = map.getSource(SRC_ACTIVE_ROUTE) as maplibregl.GeoJSONSource | undefined;
     const compSrc = map.getSource(SRC_COMPLETED_ROUTE) as maplibregl.GeoJSONSource | undefined;
+    const rideSrc = map.getSource(SRC_RIDE_TRACK) as maplibregl.GeoJSONSource | undefined;
     if (!altSrc || !actSrc || !compSrc) return;
+
+    // Sync Free Ride live breadcrumb OR Meus Pedais replay track
+    if (rideSrc) {
+      let rideCoords: number[][] = [];
+      if (curMode === 'navigate' && curNav.isFreeRide && curActiveRide && curActiveRide.track.length >= 2) {
+        rideCoords = curActiveRide.track.map((pt) => [pt.lng, pt.lat]);
+      } else if (curMode !== 'navigate' && curReplayId) {
+        const replayed = curRides.find((r) => r.id === curReplayId);
+        if (replayed && replayed.track.length >= 2) {
+          rideCoords = replayed.track.map((pt) => [pt.lng, pt.lat]);
+        }
+      }
+      rideSrc.setData({
+        type: 'FeatureCollection',
+        features:
+          rideCoords.length >= 2
+            ? [
+                {
+                  type: 'Feature',
+                  properties: {},
+                  geometry: { type: 'LineString', coordinates: rideCoords },
+                },
+              ]
+            : [],
+      });
+    }
 
     const altFeatures: GeoJSON.Feature[] =
       curMode === 'navigate'
@@ -282,7 +353,7 @@ export function EixoVerdeMap() {
 
     altSrc.setData({ type: 'FeatureCollection', features: altFeatures });
 
-    const active = cands[selIdx];
+    const active = curNav.isFreeRide ? undefined : cands[selIdx];
     if (!active || active.coords.length < 2) {
       actSrc.setData({ type: 'FeatureCollection', features: [] });
       compSrc.setData({ type: 'FeatureCollection', features: [] });
@@ -558,11 +629,48 @@ export function EixoVerdeMap() {
     }
   }, [showBikeLanes, showPois]);
 
-  // Sync routes whenever candidates, selected index, mode, or nav progress changes
+  // Sync routes & ride replay/breadcrumb whenever state updates
   useEffect(() => {
     const map = mapRef.current;
     if (map) syncRoutesToMap(map);
-  }, [candidates, selectedCandidateIdx, mode, nav.distanceAlongM]);
+  }, [candidates, selectedCandidateIdx, mode, nav.distanceAlongM, nav.isFreeRide, activeRide?.track.length, replayingRideId, rideSessions]);
+
+  // Fit bounds & render Start/Finish pins when replaying a ride from Meus Pedais
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    replayMarkersRef.current.forEach((m) => m.remove());
+    replayMarkersRef.current = [];
+
+    if (!replayingRideId || mode === 'navigate') return;
+    const replayed = rideSessions.find((r) => r.id === replayingRideId);
+    if (!replayed || replayed.track.length < 2) return;
+
+    const bounds = new maplibregl.LngLatBounds();
+    replayed.track.forEach((pt) => bounds.extend([pt.lng, pt.lat]));
+    const isDesktop = window.innerWidth >= 1024;
+    map.fitBounds(bounds, {
+      padding: isDesktop
+        ? { top: 88, bottom: 90, left: 460, right: 80 }
+        : { top: 96, bottom: 320, left: 48, right: 48 },
+      duration: 650,
+      pitch: 0,
+      bearing: 0,
+    });
+
+    const first = replayed.track[0];
+    const last = replayed.track[replayed.track.length - 1];
+    const startEl = document.createElement('div');
+    startEl.innerHTML = `<div style="width:26px;height:26px;border-radius:999px;background:#0284c7;color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.28)">I</div>`;
+    const endEl = document.createElement('div');
+    endEl.innerHTML = `<div style="width:26px;height:26px;border-radius:999px;background:#0f172a;color:#fff;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.28)">F</div>`;
+
+    replayMarkersRef.current.push(
+      new maplibregl.Marker({ element: startEl }).setLngLat([first.lng, first.lat]).addTo(map),
+      new maplibregl.Marker({ element: endEl }).setLngLat([last.lng, last.lat]).addTo(map)
+    );
+  }, [replayingRideId, rideSessions, mode]);
 
   // Fit bounds smoothly when a new route is calculated or loaded
   useEffect(() => {
