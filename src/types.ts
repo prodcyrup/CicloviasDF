@@ -58,6 +58,7 @@ export interface PlaceResult {
   name: string;
   subtitle: string;
   coords: LngLat;
+  district?: string;
   city?: string;
   state?: string;
   source: 'photon' | 'curated' | 'gps' | 'map';

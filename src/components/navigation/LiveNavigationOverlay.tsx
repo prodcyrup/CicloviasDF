@@ -159,7 +159,7 @@ export function LiveNavigationOverlay() {
 
     const onOrientation = (ev: DeviceOrientationEvent) => {
       const now = Date.now();
-      if (now - lastCompassTsRef.current < 220) return;
+      if (now - lastCompassTsRef.current < 140) return;
       const stNav = useAppStore.getState().nav;
       if (stNav.currentSpeedKmh >= 4) return;
 
@@ -170,12 +170,14 @@ export function LiveNavigationOverlay() {
       } else if (typeof ev.alpha === 'number' && Number.isFinite(ev.alpha)) {
         trueHeading = (360 - ev.alpha + BRAND.magneticDeclinationDeg + 360) % 360;
       }
-      if (
-        trueHeading !== null &&
-        Math.abs(normalizeAngleDiff(trueHeading - stNav.currentHeading)) >= 3
-      ) {
-        lastCompassTsRef.current = now;
-        updateNavTelemetry({ currentHeading: trueHeading });
+      if (trueHeading !== null) {
+        const diff = normalizeAngleDiff(trueHeading - stNav.currentHeading);
+        if (Math.abs(diff) >= 2.2) {
+          lastCompassTsRef.current = now;
+          // Gentle low-pass angular blend so compass turns glide smoothly
+          const blended = (stNav.currentHeading + diff * 0.42 + 360) % 360;
+          updateNavTelemetry({ currentHeading: blended });
+        }
       }
     };
 
@@ -188,15 +190,15 @@ export function LiveNavigationOverlay() {
     };
   }, [nav.isTracking, nav.isDemoMode, activeRoute, cumDist]);
 
-  // Smooth Demo Navigation Loop
+  // Smooth Demo Navigation Loop (220ms tick + 25m look-ahead bearing blend for silky corners)
   useEffect(() => {
     if (!nav.isDemoMode || !activeRoute) return;
     demoDistRef.current = nav.distanceAlongM;
     const cruiseKmh = activeMode?.topSpeed ?? 22;
-    const speedMps = (cruiseKmh / 3.6) * 2.4; // 2.4x demo playback speed for snappy preview
+    const speedMps = (cruiseKmh / 3.6) * 2.3;
 
     const interval = window.setInterval(() => {
-      demoDistRef.current += speedMps * 0.35;
+      demoDistRef.current += speedMps * 0.22;
       if (demoDistRef.current >= totalMeters) {
         demoDistRef.current = totalMeters;
         const end = interpolateAlongRoute(activeRoute.coords, cumDist, totalMeters);
@@ -212,14 +214,23 @@ export function LiveNavigationOverlay() {
         return;
       }
       const snap = interpolateAlongRoute(activeRoute.coords, cumDist, demoDistRef.current);
+      const ahead = interpolateAlongRoute(
+        activeRoute.coords,
+        cumDist,
+        Math.min(totalMeters, demoDistRef.current + 24)
+      );
+      const prevHeading = useAppStore.getState().nav.currentHeading;
+      const targetBearing = (snap.bearing + normalizeAngleDiff(ahead.bearing - snap.bearing) * 0.45 + 360) % 360;
+      const smoothHeading = (prevHeading + normalizeAngleDiff(targetBearing - prevHeading) * 0.32 + 360) % 360;
+
       updateNavTelemetry({
         currentPos: snap.coord,
-        currentHeading: snap.bearing,
-        currentSpeedKmh: Math.round(cruiseKmh * (0.94 + Math.random() * 0.08)),
+        currentHeading: smoothHeading,
+        currentSpeedKmh: Math.round(cruiseKmh * (0.95 + Math.random() * 0.06)),
         distanceAlongM: demoDistRef.current,
         offRouteMeters: 0,
       });
-    }, 350);
+    }, 220);
 
     return () => window.clearInterval(interval);
   }, [nav.isDemoMode, activeRoute, cumDist, totalMeters, activeMode?.topSpeed]);

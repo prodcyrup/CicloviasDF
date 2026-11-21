@@ -362,12 +362,14 @@ export async function searchPlaces(query: string, biasCenter?: LngLat): Promise<
       .map((f: { geometry: { coordinates: [number, number] }; properties: Record<string, string> }, i: number) => {
         const p = f.properties || {};
         const name = p.name || p.street || p.locality || p.city || 'Local';
-        const subParts = [p.street !== name ? p.street : null, p.district, p.city, p.state].filter(Boolean);
+        const district = p.district || p.suburb || p.locality;
+        const subParts = [p.street !== name ? p.street : null, district, p.city, p.state].filter(Boolean);
         return {
           id: `photon-${i}-${f.geometry.coordinates.join(',')}`,
           name,
           subtitle: subParts.join(', ') || 'Brasil',
           coords: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as LngLat,
+          district,
           city: p.city,
           state: p.state,
           source: 'photon' as const,
@@ -395,13 +397,17 @@ export async function reverseGeocode(coords: LngLat): Promise<PlaceResult> {
       const feat = json?.features?.[0];
       if (feat?.properties) {
         const p = feat.properties;
-        const name = p.name || p.street || p.district || 'Ponto no Mapa';
-        const subtitle = [p.district, p.city, p.state].filter(Boolean).join(', ') || `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
+        const district = p.district || p.suburb || p.locality;
+        const name = p.name || p.street || district || 'Ponto no Mapa';
+        const subtitle =
+          [district, p.city, p.state].filter(Boolean).join(', ') ||
+          `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
         return {
           id: `rev-${Date.now()}`,
           name,
           subtitle,
           coords,
+          district,
           city: p.city,
           state: p.state,
           source: 'map',

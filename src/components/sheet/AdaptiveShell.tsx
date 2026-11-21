@@ -179,33 +179,33 @@ export function AdaptiveShell() {
         </div>
       )}
 
-      {/* MOBILE FLOATING TOP BAR (< lg) — compact so EixoVerde never clips */}
+      {/* MOBILE FLOATING TOP BAR (< lg) — whole brand box opens menu and prevents text selection */}
       <header className="pointer-events-none fixed inset-x-0 top-0 z-20 flex items-center justify-between gap-1.5 px-2.5 py-2.5 safe-top lg:hidden">
-        <div className="glass-panel pointer-events-auto flex shrink-0 items-center gap-1.5 rounded-2xl px-2 py-1.5 shadow-lg">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-label="Abrir menu"
-            className="rounded-xl p-1 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Menu className="h-4.5 w-4.5" />
-          </button>
+        <button
+          id="eixoverde-mobile-menu-btn"
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Abrir menu do EixoVerde"
+          className="glass-panel pointer-events-auto flex shrink-0 select-none items-center gap-1.5 rounded-2xl px-2.5 py-1.5 shadow-lg transition-transform active:scale-[0.97]"
+        >
+          <Menu className="h-4.5 w-4.5 shrink-0 text-slate-700 dark:text-slate-200" />
           <img
             src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
-            alt={BRAND.name}
+            alt=""
+            draggable={false}
             className="h-6 w-6 shrink-0 rounded-lg"
           />
-          <span className="font-display whitespace-nowrap pr-1 text-[13px] font-extrabold tracking-tight text-slate-900 dark:text-white">
+          <span className="font-display whitespace-nowrap pr-0.5 text-[13px] font-extrabold tracking-tight text-slate-900 dark:text-white">
             {BRAND.name}
           </span>
-        </div>
+        </button>
 
         <div className="pointer-events-auto flex min-w-0 items-center gap-1">
           <button
             type="button"
             onClick={() => setGarageOpen(true)}
             title={activeVehicle.name}
-            className="glass-panel flex min-w-0 max-w-[92px] items-center gap-1 rounded-2xl px-2.5 py-2 text-xs font-bold text-slate-800 shadow-lg dark:text-slate-100"
+            className="glass-panel flex min-w-0 max-w-[92px] select-none items-center gap-1 rounded-2xl px-2.5 py-2 text-xs font-bold text-slate-800 shadow-lg dark:text-slate-100"
           >
             {activeVehicle.isElectric ? (
               <Zap className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -237,19 +237,19 @@ export function AdaptiveShell() {
       {/* DESKTOP FLOATING LEFT SIDEBAR — balanced header so icons never clip */}
       <aside className="glass-panel fixed bottom-4 left-4 top-4 z-20 hidden w-[416px] flex-col overflow-hidden rounded-3xl shadow-2xl lg:flex">
         {/* Desktop Top Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 px-3.5 py-3 dark:border-slate-800/80">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Menu"
-              className="shrink-0 rounded-xl p-1.5 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 px-3 py-2.5 dark:border-slate-800/80">
+          <button
+            id="eixoverde-desktop-menu-btn"
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Abrir menu do EixoVerde"
+            className="flex min-w-0 flex-1 select-none items-center gap-2 rounded-2xl px-1.5 py-1 text-left transition-colors hover:bg-slate-100/80 active:scale-[0.99] dark:hover:bg-slate-800/70"
+          >
+            <Menu className="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" />
             <img
               src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
-              alt={BRAND.name}
+              alt=""
+              draggable={false}
               className="h-7.5 w-7.5 shrink-0 rounded-xl shadow-xs"
             />
             <div className="min-w-0">
@@ -260,7 +260,7 @@ export function AdaptiveShell() {
                 Ciclovias &amp; Mobilidade
               </p>
             </div>
-          </div>
+          </button>
 
           <div className="flex shrink-0 items-center gap-1">
             <button
