@@ -1,10 +1,11 @@
-import type { HazardReport, SavedRoute, UserPreferences, VehicleSpec } from '../types';
+import type { HazardReport, SavedPlace, SavedRoute, UserPreferences, VehicleSpec } from '../types';
 import type { StorageAdapter } from './adapter';
 
 const DB_NAME = 'eixoverde_db_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORES = {
   routes: 'saved_routes',
+  places: 'saved_places',
   vehicles: 'custom_vehicles',
   hazards: 'hazard_reports',
   meta: 'user_meta',
@@ -23,6 +24,9 @@ function openDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORES.routes)) {
         db.createObjectStore(STORES.routes, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.places)) {
+        db.createObjectStore(STORES.places, { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains(STORES.vehicles)) {
         db.createObjectStore(STORES.vehicles, { keyPath: 'id' });
@@ -91,6 +95,17 @@ export const indexedDbStorage: StorageAdapter = {
   },
   async deleteRoute(id) {
     await removeItem(STORES.routes, id);
+  },
+
+  async getSavedPlaces() {
+    const items = await getAll<SavedPlace>(STORES.places);
+    return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+  async savePlace(place) {
+    await putItem(STORES.places, place);
+  },
+  async deletePlace(id) {
+    await removeItem(STORES.places, id);
   },
 
   async getCustomVehicles() {

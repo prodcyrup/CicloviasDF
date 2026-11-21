@@ -12,7 +12,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { VEHICLE_CATEGORY_META } from '../../data/vehicles';
+import { PRESET_VEHICLES, VEHICLE_CATEGORY_META } from '../../data/vehicles';
 import { useAppStore } from '../../store/useAppStore';
 import type { SuspensionLevel, VehicleCategory, VehicleSpec } from '../../types';
 
@@ -20,7 +20,7 @@ export function VehicleGarageModal() {
   const open = useAppStore((s) => s.garageOpen);
   const setGarageOpen = useAppStore((s) => s.setGarageOpen);
   const setCompareOpen = useAppStore((s) => s.setCompareOpen);
-  const getAllVehicles = useAppStore((s) => s.getAllVehicles);
+  const customVehicles = useAppStore((s) => s.customVehicles);
   const selectedVehicleId = useAppStore((s) => s.selectedVehicleId);
   const selectVehicle = useAppStore((s) => s.selectVehicle);
   const riderWeightKg = useAppStore((s) => s.riderWeightKg);
@@ -44,7 +44,7 @@ export function VehicleGarageModal() {
 
   if (!open) return null;
 
-  const allVehicles = getAllVehicles();
+  const allVehicles = [...customVehicles, ...PRESET_VEHICLES];
   const filtered = filterCat === 'all' ? allVehicles : allVehicles.filter((v) => v.category === filterCat);
 
   const handleCreateCustom = async (e: React.FormEvent) => {

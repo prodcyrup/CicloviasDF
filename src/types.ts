@@ -171,6 +171,18 @@ export interface RouteTelemetry {
   comfortWarning: string | null;
 }
 
+export type SavedPlaceCategory = 'home' | 'work' | 'favorite';
+
+export interface SavedPlace {
+  id: string;
+  label: string;
+  address: string;
+  coords: LngLat;
+  category: SavedPlaceCategory;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserPreferences {
   theme: ThemeMode;
   basemap: MapBasemapMode;
