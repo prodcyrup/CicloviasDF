@@ -1,8 +1,10 @@
 import type { MapBasemapMode, ThemeMode } from '../types';
 
+const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+
 export const API_KEYS = {
-  maptiler: (import.meta.env.VITE_MAPTILER_KEY as string | undefined)?.trim() || '',
-  ors: (import.meta.env.VITE_ORS_KEY as string | undefined)?.trim() || '',
+  maptiler: env?.VITE_MAPTILER_KEY?.trim() || '',
+  ors: env?.VITE_ORS_KEY?.trim() || '',
 };
 
 export function hasMapTilerKey(): boolean {
@@ -75,4 +77,6 @@ export const ENDPOINTS = {
   osrmBike: 'https://routing.openstreetmap.de/routed-bike/route/v1/driving',
   photonSearch: 'https://photon.komoot.io/api/',
   photonReverse: 'https://photon.komoot.io/reverse',
+  nominatimSearch: 'https://nominatim.openstreetmap.org/search',
+  nominatimReverse: 'https://nominatim.openstreetmap.org/reverse',
 } as const;

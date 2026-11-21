@@ -274,11 +274,21 @@ export function LiveNavigationOverlay() {
   if (!activeRoute || !upcoming) return null;
 
   const remainingMeters = Math.max(0, totalMeters - nav.distanceAlongM);
+  const remainingFraction = Math.max(0, Math.min(1, remainingMeters / Math.max(1, totalMeters)));
   const progressPct = Math.min(100, Math.round((nav.distanceAlongM / totalMeters) * 100));
+  const remainingCrossings = activeRoute.crossings.filter(
+    (c) => (c.distanceAlongM ?? Infinity) > nav.distanceAlongM
+  );
   const telemetry = computeRouteTelemetry(
     {
       ...activeRoute,
       distanceKm: Math.max(0.05, remainingMeters / 1000),
+      crossings: remainingCrossings,
+      elevation: {
+        ...activeRoute.elevation,
+        ascentM: Math.round(activeRoute.elevation.ascentM * remainingFraction),
+        descentM: Math.round(activeRoute.elevation.descentM * remainingFraction),
+      },
     },
     activeVehicle,
     selectedModeIndex,
@@ -290,18 +300,18 @@ export function LiveNavigationOverlay() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-30 flex flex-col justify-between p-3 safe-top safe-bottom">
-      {/* TOP WAZE-STYLE TURN BANNER */}
+      {/* TOP TURN BANNER */}
       <div className="mx-auto w-full max-w-lg space-y-2">
         <div className="pointer-events-auto overflow-hidden rounded-3xl bg-emerald-950/95 text-white shadow-2xl ring-1 ring-white/15 backdrop-blur-xl">
-          <div className="flex items-center gap-3.5 px-4 py-3.5">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 shadow-inner">
+          <div className="flex items-center gap-3 px-3.5 py-3 sm:gap-3.5 sm:px-4 sm:py-3.5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500 shadow-inner sm:h-14 sm:w-14">
               <ManeuverIcon type={upcoming.current.type} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="font-mono-num text-2xl font-extrabold leading-none tracking-tight text-emerald-300">
+              <div className="font-mono-num text-xl font-extrabold leading-none tracking-tight text-emerald-300 sm:text-2xl">
                 {formatDistancePtBR(upcoming.distToCurrentM)}
               </div>
-              <div className="mt-1 truncate text-base font-bold text-white">
+              <div className="mt-1 truncate text-sm font-bold text-white sm:text-base">
                 {upcoming.current.instruction}
               </div>
               {upcoming.next && (
@@ -342,79 +352,85 @@ export function LiveNavigationOverlay() {
       </div>
 
       {/* RIGHT FLOATING HANDLEBAR CONTROLS */}
-      <div className="pointer-events-auto fixed right-3 top-1/2 flex -translate-y-1/2 flex-col gap-2">
+      <div className="pointer-events-auto fixed right-2.5 top-1/2 flex -translate-y-1/2 flex-col gap-1.5 sm:right-3 sm:gap-2">
         <button
           type="button"
           onClick={() => updateNavTelemetry({ followUser: true })}
           title="Centralizar no GPS"
-          className={`flex h-12 w-12 items-center justify-center rounded-2xl shadow-lg backdrop-blur-xl transition-all ${
+          aria-label="Centralizar no GPS"
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg backdrop-blur-xl transition-all sm:h-12 sm:w-12 ${
             nav.followUser
               ? 'bg-emerald-600 text-white'
               : 'glass-panel text-slate-700 hover:text-emerald-600 dark:text-slate-100'
           }`}
         >
-          <LocateFixed className="h-5 w-5" />
+          <LocateFixed className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
         </button>
 
         <button
           type="button"
           onClick={() => updateNavTelemetry({ pitch3D: !nav.pitch3D })}
           title={nav.pitch3D ? 'Modo 3D / Direção' : 'Modo 2D / Norte'}
-          className="glass-panel flex h-12 w-12 flex-col items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100"
+          aria-label={nav.pitch3D ? 'Alternar para modo 2D' : 'Alternar para modo 3D'}
+          className="glass-panel flex h-10 w-10 flex-col items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100 sm:h-12 sm:w-12"
         >
-          <Compass className={`h-4.5 w-4.5 ${nav.pitch3D ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
-          <span className="text-[9px] font-extrabold">{nav.pitch3D ? '3D' : '2D'}</span>
+          <Compass className={`h-4 w-4 sm:h-4.5 sm:w-4.5 ${nav.pitch3D ? 'text-emerald-600 dark:text-emerald-400' : ''}`} />
+          <span className="text-[9px] font-extrabold leading-none">{nav.pitch3D ? '3D' : '2D'}</span>
         </button>
 
         <button
           type="button"
           onClick={cycleVoiceMode}
           title="Alternar Voz / Alerta / Mudo"
-          className="glass-panel flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100"
+          aria-label="Alternar modo de áudio"
+          className="glass-panel flex h-10 w-10 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100 sm:h-12 sm:w-12"
         >
           {voiceMode === 'voice' ? (
-            <Volume2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            <Volume2 className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400 sm:h-5 sm:w-5" />
           ) : voiceMode === 'chime' ? (
-            <Volume1 className="h-5 w-5 text-amber-500" />
+            <Volume1 className="h-4.5 w-4.5 text-amber-500 sm:h-5 sm:w-5" />
           ) : (
-            <VolumeX className="h-5 w-5 text-slate-400" />
+            <VolumeX className="h-4.5 w-4.5 text-slate-400 sm:h-5 sm:w-5" />
           )}
         </button>
 
-        {/* Waze-style Report Hazard Button */}
+        {/* Report Hazard Button */}
         <button
           type="button"
           onClick={() => openHazardReporter()}
           title="Reportar perigo na ciclovia"
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/30 transition-transform hover:scale-105 active:scale-95"
+          aria-label="Reportar perigo na ciclovia"
+          className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/30 transition-transform hover:scale-105 active:scale-95 sm:h-12 sm:w-12"
         >
-          <AlertTriangle className="h-5.5 w-5.5" />
+          <AlertTriangle className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
         </button>
 
         <button
           type="button"
           onClick={() => void toggleFullscreen()}
           title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-          className="glass-panel flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100"
+          aria-label={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+          className="glass-panel flex h-10 w-10 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100 sm:h-12 sm:w-12"
         >
-          {isFullscreen ? <Minimize2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <Maximize2 className="h-5 w-5" />}
+          {isFullscreen ? <Minimize2 className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400 sm:h-5 sm:w-5" /> : <Maximize2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />}
         </button>
 
         <button
           type="button"
           onClick={toggleTheme}
           title="Tema Claro / Escuro"
-          className="glass-panel flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100"
+          aria-label="Alternar tema claro ou escuro"
+          className="glass-panel flex h-10 w-10 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100 sm:h-12 sm:w-12"
         >
-          {theme === 'dark' ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5 text-slate-700" />}
+          {theme === 'dark' ? <Sun className="h-4.5 w-4.5 text-amber-400 sm:h-5 sm:w-5" /> : <Moon className="h-4.5 w-4.5 text-slate-700 sm:h-5 sm:w-5" />}
         </button>
       </div>
 
-      {/* BOTTOM SPEEDOMETER + WAZE ETA BAR */}
-      <div className="mx-auto flex w-full max-w-lg items-end gap-2.5">
-        {/* Waze Speedometer Circle */}
-        <div className="glass-panel pointer-events-auto flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-full shadow-xl">
-          <span className="font-mono-num text-xl font-extrabold leading-none text-slate-900 dark:text-white">
+      {/* BOTTOM SPEEDOMETER + ETA BAR */}
+      <div className="mx-auto flex w-full max-w-lg items-end gap-2 sm:gap-2.5">
+        {/* Speedometer Circle */}
+        <div className="glass-panel pointer-events-auto flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full shadow-xl sm:h-16 sm:w-16">
+          <span className="font-mono-num text-lg font-extrabold leading-none text-slate-900 dark:text-white sm:text-xl">
             {nav.currentSpeedKmh}
           </span>
           <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -423,28 +439,28 @@ export function LiveNavigationOverlay() {
         </div>
 
         {/* Bottom ETA / Progress / Exit Card */}
-        <div className="glass-panel pointer-events-auto flex-1 overflow-hidden rounded-3xl shadow-2xl">
+        <div className="glass-panel pointer-events-auto min-w-0 flex-1 overflow-hidden rounded-3xl shadow-2xl">
           <div className="h-1.5 w-full bg-slate-200/70 dark:bg-slate-800">
             <div
               className="h-full bg-emerald-500 transition-all duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <div>
+          <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+            <div className="min-w-0">
               <div className="flex items-baseline gap-2">
-                <span className="font-mono-num text-xl font-extrabold text-emerald-700 dark:text-emerald-400">
+                <span className="font-mono-num whitespace-nowrap text-lg font-extrabold text-emerald-700 dark:text-emerald-400 sm:text-xl">
                   {formatDurationPtBR(telemetry.oneWayMin)}
                 </span>
-                <span className="font-mono-num text-sm font-semibold text-slate-600 dark:text-slate-300">
+                <span className="font-mono-num whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-slate-300 sm:text-sm">
                   {formatDistancePtBR(remainingMeters)}
                 </span>
               </div>
-              <div className="mt-0.5 flex items-center gap-2.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Chegada {etaStr}</span>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">
+                <span className="whitespace-nowrap">Chegada {etaStr}</span>
                 {activeVehicle.isElectric && (
-                  <span className="inline-flex items-center gap-1 font-semibold text-sky-600 dark:text-sky-400">
-                    <BatteryCharging className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-sky-600 dark:text-sky-400">
+                    <BatteryCharging className="h-3.5 w-3.5 shrink-0" />
                     {telemetry.batteryLeftPct}% est.
                   </span>
                 )}
@@ -454,7 +470,7 @@ export function LiveNavigationOverlay() {
             <button
               type="button"
               onClick={stopNavigation}
-              className="flex h-11 items-center gap-1.5 rounded-2xl bg-rose-600 px-4 text-sm font-extrabold text-white shadow-md shadow-rose-600/25 transition-colors hover:bg-rose-500"
+              className="flex h-10 shrink-0 items-center gap-1 rounded-2xl bg-rose-600 px-3 text-xs font-extrabold text-white shadow-md shadow-rose-600/25 transition-colors hover:bg-rose-500 sm:h-11 sm:gap-1.5 sm:px-4 sm:text-sm"
             >
               <X className="h-4 w-4" />
               Sair

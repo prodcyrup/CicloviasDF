@@ -227,30 +227,50 @@ async function fetchOsrmAlternatives(waypoints: LngLat[]): Promise<RouteCandidat
     const json = await res.json();
     const routes = Array.isArray(json?.routes) ? json.routes : [];
 
-    return routes.slice(0, 3).map((r: { distance: number; geometry: { coordinates: number[][] } }, idx: number) => {
-      const meta = PROFILE_DEFS[idx] ?? PROFILE_DEFS[0];
-      const coords: Coord3D[] = r.geometry.coordinates.map(([lng, lat]) => [+lng.toFixed(6), +lat.toFixed(6)]);
-      const distanceKm = +(r.distance / 1000).toFixed(2);
-      const elevation = computeElevationStats(coords);
-      const surfaces = computeSurfaceBreakdown(coords, meta.profile);
-      const crossings = detectArterialCrossings(coords);
-      const maneuvers = extractRouteManeuvers(coords);
+    const scored = routes
+      .slice(0, 3)
+      .map((r: { distance: number; geometry: { coordinates: number[][] } }) => {
+        const coords: Coord3D[] = r.geometry.coordinates.map(([lng, lat]) => [+lng.toFixed(6), +lat.toFixed(6)]);
+        const distanceKm = +(r.distance / 1000).toFixed(2);
+        const elevation = computeElevationStats(coords);
+        const surfaces = computeSurfaceBreakdown(coords, 'safe');
+        const crossings = detectArterialCrossings(coords);
+        const maneuvers = extractRouteManeuvers(coords);
+        return { coords, distanceKm, elevation, surfaces, crossings, maneuvers };
+      })
+      .sort((a: { surfaces: SurfaceBreakdown; distanceKm: number }, b: { surfaces: SurfaceBreakdown; distanceKm: number }) =>
+        b.surfaces.safetyScore - a.surfaces.safetyScore || a.distanceKm - b.distanceKm
+      );
 
-      return {
-        id: `osrm-${meta.profile}-${idx}-${Date.now()}`,
-        profile: meta.profile,
-        title: meta.title,
-        subtitle: meta.subtitle,
-        source: 'osrm',
-        coords,
-        distanceKm,
-        elevation,
-        surfaces,
-        crossings,
-        maneuvers,
-        waypoints,
-      };
-    });
+    return scored.map(
+      (
+        item: {
+          coords: Coord3D[];
+          distanceKm: number;
+          elevation: RouteCandidate['elevation'];
+          surfaces: SurfaceBreakdown;
+          crossings: RouteCandidate['crossings'];
+          maneuvers: RouteCandidate['maneuvers'];
+        },
+        idx: number
+      ) => {
+        const meta = PROFILE_DEFS[idx] ?? PROFILE_DEFS[0];
+        return {
+          id: `osrm-${meta.profile}-${idx}-${Date.now()}`,
+          profile: meta.profile,
+          title: meta.title,
+          subtitle: meta.subtitle,
+          source: 'osrm' as const,
+          coords: item.coords,
+          distanceKm: item.distanceKm,
+          elevation: item.elevation,
+          surfaces: item.surfaces,
+          crossings: item.crossings,
+          maneuvers: item.maneuvers,
+          waypoints,
+        };
+      }
+    );
   } catch {
     return [];
   }
@@ -382,23 +402,71 @@ export async function searchPlaces(query: string, biasCenter?: LngLat): Promise<
       const dup = merged.some((m) => haversineMeters(m.coords, item.coords) < 120);
       if (!dup) merged.push(item);
     }
-    return merged.slice(0, 8);
+    if (merged.length > 0) {
+      return merged.slice(0, 8);
+    }
   } catch {
-    return curatedMatches.slice(0, 6);
+    // Fall through to Nominatim Brazil fallback
   }
+
+  // Fallback to Nominatim (Brazil scoped) if Photon failed or returned zero results
+  try {
+    const nomUrl = `${ENDPOINTS.nominatimSearch}?q=${encodeURIComponent(q)}&countrycodes=br&format=json&addressdetails=1&limit=6`;
+    const res = await fetchWithTimeout(nomUrl, { method: 'GET' }, 4500);
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{
+        place_id: number;
+        display_name?: string;
+        name?: string;
+        lat: string;
+        lon: string;
+        address?: Record<string, string>;
+      }>;
+      const nomResults: PlaceResult[] = (Array.isArray(rows) ? rows : []).map((row) => {
+        const addr = row.address || {};
+        const district = addr.suburb || addr.neighbourhood || addr.city_district;
+        const city = addr.city || addr.town || addr.municipality;
+        const state = addr.state;
+        const name = row.name || addr.road || district || row.display_name?.split(',')[0] || 'Local';
+        const subtitle = [district, city, state].filter(Boolean).join(', ') || row.display_name || 'Brasil';
+        return {
+          id: `nom-${row.place_id}`,
+          name,
+          subtitle,
+          coords: [parseFloat(row.lon), parseFloat(row.lat)] as LngLat,
+          district,
+          city,
+          state,
+          source: 'nominatim' as const,
+        };
+      });
+      const merged: PlaceResult[] = [...curatedMatches.slice(0, 3)];
+      for (const item of nomResults) {
+        if (!Number.isFinite(item.coords[0]) || !Number.isFinite(item.coords[1])) continue;
+        const dup = merged.some((m) => haversineMeters(m.coords, item.coords) < 120);
+        if (!dup) merged.push(item);
+      }
+      return merged.slice(0, 8);
+    }
+  } catch {
+    // Offline fallback
+  }
+
+  return curatedMatches.slice(0, 6);
 }
 
 export async function reverseGeocode(coords: LngLat): Promise<PlaceResult> {
   try {
     const url = `${ENDPOINTS.photonReverse}?lat=${coords[1].toFixed(6)}&lon=${coords[0].toFixed(6)}`;
-    const res = await fetchWithTimeout(url, { method: 'GET' }, 3500);
+    const res = await fetchWithTimeout(url, { method: 'GET', headers: { Accept: 'application/json' } }, 5500);
     if (res.ok) {
       const json = await res.json();
       const feat = json?.features?.[0];
       if (feat?.properties) {
         const p = feat.properties;
         const district = p.district || p.suburb || p.locality;
-        const name = p.name || p.street || district || 'Ponto no Mapa';
+        const rawName = typeof p.name === 'string' && !/^\d{5}-?\d{3}$/.test(p.name.trim()) ? p.name.trim() : '';
+        const name = rawName || p.street || district || p.city || 'Ponto no Mapa';
         const subtitle =
           [district, p.city, p.state].filter(Boolean).join(', ') ||
           `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
@@ -415,8 +483,64 @@ export async function reverseGeocode(coords: LngLat): Promise<PlaceResult> {
       }
     }
   } catch {
-    // Fallback to coordinates
+    // Try Nominatim reverse fallback
   }
+
+  try {
+    const nomUrl = `${ENDPOINTS.nominatimReverse}?lat=${coords[1].toFixed(6)}&lon=${coords[0].toFixed(6)}&format=json&addressdetails=1`;
+    const res = await fetchWithTimeout(
+      nomUrl,
+      { method: 'GET', headers: { Accept: 'application/json', 'Accept-Language': 'pt-BR,pt;q=0.9' } },
+      5500
+    );
+    if (res.ok) {
+      const json = (await res.json()) as { name?: string; display_name?: string; address?: Record<string, string> };
+      const addr = json.address || {};
+      const district = addr.suburb || addr.neighbourhood || addr.city_district;
+      const city = addr.city || addr.town || addr.municipality;
+      const state = addr.state;
+      const name = json.name || addr.road || district || 'Ponto no Mapa';
+      const subtitle =
+        [district, city, state].filter(Boolean).join(', ') ||
+        `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
+      return {
+        id: `rev-nom-${Date.now()}`,
+        name,
+        subtitle,
+        coords,
+        district,
+        city,
+        state,
+        source: 'map',
+      };
+    }
+  } catch {
+    // Fallback to nearest curated DF landmark or coordinates
+  }
+
+  // Graceful local fallback inside Brasília DF when offline or geocoder rate-limited
+  let nearest: PlaceResult | null = null;
+  let nearestDist = 3500;
+  for (const place of POPULAR_DF_PLACES) {
+    const d = haversineMeters(coords, place.coords);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearest = place;
+    }
+  }
+  if (nearest) {
+    return {
+      id: `map-near-${Date.now()}`,
+      name: `Próximo a ${nearest.name}`,
+      subtitle: nearest.subtitle,
+      coords,
+      district: nearest.district,
+      city: nearest.city,
+      state: nearest.state,
+      source: 'map',
+    };
+  }
+
   return {
     id: `map-${Date.now()}`,
     name: 'Ponto Selecionado',

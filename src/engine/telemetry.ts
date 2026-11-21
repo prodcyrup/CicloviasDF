@@ -33,7 +33,11 @@ export function computeRouteTelemetry(
   const roundTripMin = oneWayMin * 2;
   const effectiveAvgSpeed = +(distanceKm / Math.max(0.01, oneWayExactMin / 60)).toFixed(1);
 
+  const safeWeightKg = Math.max(30, Math.min(180, Number.isFinite(riderWeightKg) ? riderWeightKg : 75));
   const tripDistanceKm = +(isRoundTrip ? distanceKm * 2 : distanceKm).toFixed(2);
+  const tripAscentM = isRoundTrip
+    ? route.elevation.ascentM + route.elevation.descentM
+    : route.elevation.ascentM;
 
   // Electric range & battery burn model
   let realRangeKm = 0;
@@ -41,9 +45,10 @@ export function computeRouteTelemetry(
   let batteryLeftPct = 100;
 
   if (vehicle.isElectric && vehicle.nominalRangeKm > 0) {
-    const weightDelta = riderWeightKg - 75;
+    const weightDelta = safeWeightKg - 75;
     const weightFactor = Math.max(0.68, Math.min(1.14, 1 - (weightDelta / 10) * 0.045));
-    const climbPenaltyFactor = Math.max(0.8, 1 - (route.elevation.ascentM / 1000) * 0.36);
+    const avgAscentPerKm = tripAscentM / Math.max(1, tripDistanceKm);
+    const climbPenaltyFactor = Math.max(0.75, 1 - (avgAscentPerKm / 100) * 0.36);
     realRangeKm = +(
       vehicle.nominalRangeKm *
       (mode?.rangeMult ?? 1) *
@@ -56,23 +61,25 @@ export function computeRouteTelemetry(
 
   // Calories (bikes burn ~30-42 kcal/km; e-bikes assisted ~10-14 kcal/km; scooters ~3 kcal/km)
   const kcalPerKm = !vehicle.isElectric
-    ? 34 * (riderWeightKg / 70)
+    ? 34 * (safeWeightKg / 70)
     : vehicle.category === 'ebike'
-      ? 12 * (riderWeightKg / 70)
+      ? 12 * (safeWeightKg / 70)
       : 3;
-  const caloriesKcal = Math.round(tripDistanceKm * kcalPerKm + route.elevation.ascentM * (vehicle.isElectric ? 0.15 : 0.65));
+  const caloriesKcal = Math.round(tripDistanceKm * kcalPerKm + tripAscentM * (vehicle.isElectric ? 0.15 : 0.65));
 
   // CO2 avoided vs average urban car (~0.175 kg CO2/km)
   const co2SavedKg = +(tripDistanceKm * 0.175).toFixed(2);
 
-  // Comfort & wheel-size warning
+  // Critical range alerts always take priority over comfort advisories
   let comfortWarning: string | null = null;
-  if (vehicle.wheelInches <= 9 && (route.surfaces.trilhaPct > 5 || vehicle.suspensionLevel === 'nenhuma')) {
+  if (vehicle.isElectric && realRangeKm > 0 && tripDistanceKm > realRangeKm) {
+    comfortWarning = `Distância (${tripDistanceKm.toFixed(1).replace('.', ',')} km) excede a autonomia real estimada (${realRangeKm} km). Use o modo Eco ou planeje recarga.`;
+  } else if (vehicle.isElectric && batteryLeftPct <= 20) {
+    comfortWarning = `Bateria crítica estimada (${batteryLeftPct}% restante). Considere o modo Eco ou carregar antes da volta.`;
+  } else if (vehicle.wheelInches <= 9 && (route.surfaces.trilhaPct > 5 || vehicle.suspensionLevel === 'nenhuma')) {
     comfortWarning = `${vehicle.wheelLabel}: reduza a velocidade em raízes, trechos irregulares ou trilhas (${route.surfaces.trilhaPct}%).`;
   } else if (vehicle.category === 'bike_speed' && route.surfaces.trilhaPct > 6) {
     comfortWarning = `Rota contém ${route.surfaces.trilhaPct}% de trilha/piso irregular — atenção com pneus finos Speed.`;
-  } else if (vehicle.isElectric && batteryLeftPct <= 20) {
-    comfortWarning = `Bateria crítica estimada (${batteryLeftPct}% restante). Considere o modo Eco ou carregar antes da volta.`;
   }
 
   return {

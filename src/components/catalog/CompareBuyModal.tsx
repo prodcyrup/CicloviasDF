@@ -52,19 +52,25 @@ export function CompareBuyModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-xs sm:items-center sm:p-4">
-      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900 sm:rounded-3xl">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+      onClick={() => setCompareOpen(false)}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900 sm:rounded-3xl"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/12 text-sky-600 dark:text-sky-400">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3.5 dark:border-slate-800 sm:px-5 sm:py-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/12 text-sky-600 dark:text-sky-400">
               <ShoppingBag className="h-5 w-5" />
             </span>
-            <div>
-              <h2 className="font-display text-lg font-extrabold text-slate-900 dark:text-white">
-                Comparar & Comprar
+            <div className="min-w-0">
+              <h2 className="font-display truncate text-base font-extrabold text-slate-900 dark:text-white sm:text-lg">
+                Comparar &amp; Comprar
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                 Catálogo extra para comparar patinetes elétricos, e-bikes e micromobilidade no Brasil
               </p>
             </div>
@@ -72,15 +78,16 @@ export function CompareBuyModal() {
           <button
             type="button"
             onClick={() => setCompareOpen(false)}
-            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Fechar comparativo"
+            className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Filter Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-5 py-3 dark:border-slate-800 dark:bg-slate-800/40">
-          <div className="flex gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/40 sm:px-5 sm:py-3">
+          <div className="flex max-w-full gap-1.5 overflow-x-auto pb-0.5 ev-scroll">
             {[
               { id: 'all', label: 'Todos' },
               { id: 'patinete', label: 'Patinetes' },
@@ -91,7 +98,7 @@ export function CompareBuyModal() {
                 key={tab.id}
                 type="button"
                 onClick={() => setCategoryFilter(tab.id as typeof categoryFilter)}
-                className={`rounded-full px-3 py-1 text-xs font-bold transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap transition-colors ${
                   categoryFilter === tab.id
                     ? 'bg-slate-900 text-white dark:bg-emerald-600'
                     : 'bg-white text-slate-600 hover:bg-slate-200/60 dark:bg-slate-800 dark:text-slate-300'
