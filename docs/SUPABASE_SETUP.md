@@ -46,6 +46,14 @@ No painel do Supabase, vá em **Authentication → URL Configuration**:
 
 Clique em **Save**.
 
+### (Opcional) Ativar Login com Google ("Continuar com Google")
+1. No [Google Cloud Console — Credentials](https://console.cloud.google.com/apis/credentials), clique em **Create Credentials → OAuth client ID** (tipo **Web application**).
+2. Em **Authorized JavaScript origins**, adicione:
+   - `https://prodcyrup.github.io`
+   - `https://<seu-project-ref>.supabase.co`
+3. Em **Authorized redirect URIs**, cole a **Callback URL (for OAuth)** exibida no painel do Supabase em **Authentication → Providers → Google** (formato `https://<seu-project-ref>.supabase.co/auth/v1/callback`).
+4. Copie o **Client ID** e o **Client Secret** gerados pelo Google, cole em **Authentication → Providers → Google** no Supabase, ative **Enable Sign in with Google** e clique em **Save**.
+
 ---
 
 ## Passo 4 — Copiar URL e Chave Pública do Projeto
