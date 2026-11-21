@@ -55,6 +55,18 @@ export function AdaptiveShell() {
   const showBikeLanes = useAppStore((s) => s.showBikeLanes);
   const mapPickTarget = useAppStore((s) => s.mapPickTarget);
   const activeVehicle = useAppStore(selectActiveVehicle);
+  const authUser = useAppStore((s) => s.authUser);
+  const syncStatus = useAppStore((s) => s.syncStatus);
+
+  const showSyncDot = Boolean(authUser) || syncStatus === 'syncing' || syncStatus === 'offline' || syncStatus === 'error';
+  const syncDotColor =
+    syncStatus === 'error'
+      ? 'bg-rose-500'
+      : syncStatus === 'offline'
+        ? 'bg-amber-400'
+        : syncStatus === 'syncing'
+          ? 'bg-sky-400 animate-pulse'
+          : 'bg-emerald-400';
 
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const toggleBasemap = useAppStore((s) => s.toggleBasemap);
@@ -197,12 +209,20 @@ export function AdaptiveShell() {
           className="glass-panel pointer-events-auto flex shrink-0 select-none items-center gap-1.5 rounded-2xl px-2.5 py-1.5 shadow-lg transition-transform active:scale-[0.97]"
         >
           <Menu className="h-4.5 w-4.5 shrink-0 text-slate-700 dark:text-slate-200" />
-          <img
-            src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
-            alt=""
-            draggable={false}
-            className="h-6 w-6 shrink-0 rounded-lg"
-          />
+          <span className="relative h-6 w-6 shrink-0">
+            <img
+              src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
+              alt=""
+              draggable={false}
+              className="h-6 w-6 rounded-lg"
+            />
+            {showSyncDot && (
+              <span
+                data-testid="eixoverde-shell-sync-dot"
+                className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-white dark:ring-slate-900 ${syncDotColor}`}
+              />
+            )}
+          </span>
           <span className="font-display whitespace-nowrap pr-0.5 text-[13px] font-extrabold tracking-tight text-slate-900 dark:text-white">
             {BRAND.name}
           </span>
@@ -254,12 +274,20 @@ export function AdaptiveShell() {
             className="flex min-w-0 flex-1 select-none items-center gap-2 rounded-2xl px-1.5 py-1 text-left transition-colors hover:bg-slate-100/80 active:scale-[0.99] dark:hover:bg-slate-800/70"
           >
             <Menu className="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" />
-            <img
-              src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
-              alt=""
-              draggable={false}
-              className="h-7.5 w-7.5 shrink-0 rounded-xl shadow-xs"
-            />
+            <span className="relative h-7.5 w-7.5 shrink-0">
+              <img
+                src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
+                alt=""
+                draggable={false}
+                className="h-7.5 w-7.5 rounded-xl shadow-xs"
+              />
+              {showSyncDot && (
+                <span
+                  id="eixoverde-shell-sync-dot"
+                  className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${syncDotColor}`}
+                />
+              )}
+            </span>
             <div className="min-w-0">
               <h1 className="font-display truncate text-sm font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white">
                 {BRAND.name}

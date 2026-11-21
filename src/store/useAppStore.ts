@@ -1,5 +1,16 @@
 import { create } from 'zustand';
+import {
+  getCurrentSession,
+  sendPasswordReset,
+  signInWithMagicLink,
+  signInWithPassword,
+  signOut as authSignOut,
+  signUpWithPassword,
+  subscribeAuthChanges,
+  updatePassword,
+} from '../cloud/authService';
 import { BRAND } from '../config/brand';
+import { hasSupabaseConfig } from '../config/providers';
 import { CURATED_DF_ROUTES } from '../data/curatedRoutes';
 import { PRESET_VEHICLES } from '../data/vehicles';
 import {
@@ -11,18 +22,22 @@ import {
 import { decodeShareableRouteFromUrl } from '../engine/gpx';
 import { extractRouteManeuvers } from '../engine/navigation';
 import { planMultiProfileRoutes, reverseGeocode } from '../engine/routing';
-import { indexedDbStorage } from '../storage/indexedDbAdapter';
+import { repository } from '../storage/repository';
+import { syncEngine } from '../storage/syncEngine';
 import type {
   AppMode,
+  AuthUser,
   HazardKind,
   HazardReport,
   LngLat,
+  LocalMigrationSummary,
   MapBasemapMode,
   PlaceResult,
   RouteCandidate,
   SavedPlace,
   SavedPlaceCategory,
   SavedRoute,
+  SyncStatus,
   ThemeMode,
   UserPreferences,
   VehicleSpec,
@@ -71,6 +86,19 @@ export interface AppStore {
   showPois: boolean;
   showHazards: boolean;
 
+  // Phase 2: Cloud Auth & Offline-First Sync State
+  cloudConfigured: boolean;
+  authUser: AuthUser | null;
+  authLoading: boolean;
+  authRecoveryMode: boolean;
+  syncStatus: SyncStatus;
+  pendingSyncCount: number;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+  authModalOpen: boolean;
+  migrationPromptOpen: boolean;
+  localMigrationSummary: LocalMigrationSummary | null;
+
   // User & Vehicle Garage
   customVehicles: VehicleSpec[];
   selectedVehicleId: string;
@@ -115,6 +143,23 @@ export interface AppStore {
 
   // Actions
   bootstrap: () => Promise<void>;
+  hydrateFromStorage: () => Promise<void>;
+  initAuthAndSync: () => Promise<void>;
+  setAuthModalOpen: (open: boolean) => void;
+  setMigrationPromptOpen: (open: boolean) => void;
+  signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName?: string
+  ) => Promise<{ ok: boolean; needsEmailConfirmation?: boolean; error?: string }>;
+  sendMagicLink: (email: string) => Promise<{ ok: boolean; error?: string }>;
+  requestPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
+  completePasswordRecovery: (newPassword: string) => Promise<{ ok: boolean; error?: string }>;
+  signOut: () => Promise<void>;
+  syncNow: () => Promise<boolean>;
+  migrateLocalToCloud: () => Promise<boolean>;
+
   locateCurrentPosition: (options?: { silent?: boolean; flyToUser?: boolean }) => Promise<PlaceResult | null>;
   useCurrentLocationAsOrigin: () => Promise<void>;
   setMode: (mode: AppMode) => void;
@@ -241,7 +286,7 @@ function persistPrefs(state: AppStore): void {
     homePlace: state.homePlace,
     workPlace: state.workPlace,
   };
-  void indexedDbStorage.savePreferences(prefs);
+  void repository.savePreferences(prefs);
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -253,6 +298,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   showBikeLanes: true,
   showPois: true,
   showHazards: true,
+
+  cloudConfigured: hasSupabaseConfig(),
+  authUser: null,
+  authLoading: false,
+  authRecoveryMode: false,
+  syncStatus: hasSupabaseConfig() ? 'idle' : 'local',
+  pendingSyncCount: 0,
+  lastSyncedAt: null,
+  syncError: null,
+  authModalOpen: false,
+  migrationPromptOpen: false,
+  localMigrationSummary: null,
 
   customVehicles: [],
   selectedVehicleId: 'jet-aluguel',
@@ -302,20 +359,20 @@ export const useAppStore = create<AppStore>((set, get) => ({
   mapContextPin: null,
   toasts: [],
 
-  async bootstrap() {
-    if (get().initialized) return;
+  async hydrateFromStorage() {
     const [prefs, userRoutes, savedPlaces, customVehicles, hazards] = await Promise.all([
-      indexedDbStorage.getPreferences(),
-      indexedDbStorage.getSavedRoutes(),
-      indexedDbStorage.getSavedPlaces(),
-      indexedDbStorage.getCustomVehicles(),
-      indexedDbStorage.getHazards(),
+      repository.getPreferences(),
+      repository.getSavedRoutes(),
+      repository.getSavedPlaces(),
+      repository.getCustomVehicles(),
+      repository.getHazards(),
     ]);
 
-    const theme: ThemeMode = prefs.theme ?? 'light';
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const theme: ThemeMode = prefs.theme ?? get().theme ?? 'light';
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    }
 
-    // Merge user saved routes with curated routes (user edits override curated IDs)
     const userIds = new Set(userRoutes.map((r) => r.id));
     const mergedRoutes = [...userRoutes, ...CURATED_DF_ROUTES.filter((c) => !userIds.has(c.id))];
 
@@ -323,13 +380,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const workSaved = savedPlaces.find((p) => p.category === 'work');
 
     set({
-      initialized: true,
       theme,
-      basemap: prefs.basemap ?? 'standard',
-      selectedVehicleId: prefs.selectedVehicleId ?? 'jet-aluguel',
-      selectedModeIndex: prefs.selectedModeIndex ?? 1,
-      riderWeightKg: prefs.riderWeightKg ?? 70,
-      voiceMode: prefs.voiceMode ?? 'voice',
+      basemap: prefs.basemap ?? get().basemap ?? 'standard',
+      selectedVehicleId: prefs.selectedVehicleId ?? get().selectedVehicleId ?? 'jet-aluguel',
+      selectedModeIndex: prefs.selectedModeIndex ?? get().selectedModeIndex ?? 1,
+      riderWeightKg: prefs.riderWeightKg ?? get().riderWeightKg ?? 70,
+      voiceMode: prefs.voiceMode ?? get().voiceMode ?? 'voice',
       showBikeLanes: prefs.showBikeLanes ?? true,
       showPois: prefs.showPois ?? true,
       showHazards: prefs.showHazards ?? true,
@@ -344,6 +400,221 @@ export const useAppStore = create<AppStore>((set, get) => ({
       savedPlaces,
       hazards,
     });
+  },
+
+  async initAuthAndSync() {
+    const configured = hasSupabaseConfig();
+    set({
+      cloudConfigured: configured,
+      syncStatus: configured ? 'idle' : 'local',
+    });
+
+    syncEngine.subscribe((snap) => {
+      set({
+        syncStatus: snap.status,
+        pendingSyncCount: snap.pendingCount,
+        lastSyncedAt: snap.lastSyncedAt,
+        syncError: snap.error,
+      });
+    });
+
+    syncEngine.onHydrate(async () => {
+      await get().hydrateFromStorage();
+    });
+
+    if (!configured) {
+      await syncEngine.initialize(null);
+      return;
+    }
+
+    const { user } = await getCurrentSession();
+    set({ authUser: user });
+    await syncEngine.initialize(user?.id ?? null);
+
+    if (user) {
+      const alreadyMigrated = await syncEngine.hasCompletedInitialMigration(user.id);
+      const summary = await syncEngine.getLocalMigrationSummary();
+      if (!alreadyMigrated && summary.total > 0) {
+        set({ localMigrationSummary: summary, migrationPromptOpen: true });
+      } else {
+        await syncEngine.markInitialMigrationCompleted(user.id);
+        void syncEngine.syncNow();
+      }
+    }
+
+    subscribeAuthChanges((event, nextUser) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        set({ authRecoveryMode: true, authModalOpen: true, authUser: nextUser });
+        return;
+      }
+      if (event === 'SIGNED_OUT') {
+        set({ authUser: null, authRecoveryMode: false });
+        void syncEngine.setAuthenticatedUser(null);
+        return;
+      }
+      if (nextUser && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+        const prevId = get().authUser?.id;
+        set({ authUser: nextUser });
+        void syncEngine.setAuthenticatedUser(nextUser.id);
+        if (prevId !== nextUser.id) {
+          void (async () => {
+            const alreadyMigrated = await syncEngine.hasCompletedInitialMigration(nextUser.id);
+            const summary = await syncEngine.getLocalMigrationSummary();
+            if (!alreadyMigrated && summary.total > 0) {
+              set({ localMigrationSummary: summary, migrationPromptOpen: true });
+            } else {
+              await syncEngine.markInitialMigrationCompleted(nextUser.id);
+              void syncEngine.syncNow();
+            }
+          })();
+        }
+      }
+    });
+  },
+
+  setAuthModalOpen(open) {
+    set({ authModalOpen: open, authRecoveryMode: open ? get().authRecoveryMode : false });
+  },
+
+  setMigrationPromptOpen(open) {
+    set({ migrationPromptOpen: open });
+  },
+
+  async signIn(email, password) {
+    set({ authLoading: true });
+    const res = await signInWithPassword(email, password);
+    set({ authLoading: false });
+    if (res.error || !res.user) {
+      return { ok: false, error: res.error || 'Falha ao entrar.' };
+    }
+    const user = res.user;
+    set({ authUser: user, authModalOpen: false, cloudConfigured: hasSupabaseConfig() });
+    await syncEngine.setAuthenticatedUser(user.id);
+
+    const alreadyMigrated = await syncEngine.hasCompletedInitialMigration(user.id);
+    const summary = await syncEngine.getLocalMigrationSummary();
+    if (!alreadyMigrated && summary.total > 0) {
+      set({ localMigrationSummary: summary, migrationPromptOpen: true });
+    } else {
+      await syncEngine.markInitialMigrationCompleted(user.id);
+      void syncEngine.syncNow({ force: true });
+    }
+
+    get().pushToast('Sessão iniciada!', `Bem-vindo(a), ${user.displayName || user.email}`, 'emerald');
+    return { ok: true };
+  },
+
+  async signUp(email, password, displayName) {
+    set({ authLoading: true });
+    const res = await signUpWithPassword(email, password, displayName);
+    set({ authLoading: false });
+    if (res.error) {
+      return { ok: false, error: res.error };
+    }
+    if (res.needsEmailConfirmation) {
+      get().pushToast(
+        'Confirme seu e-mail',
+        'Enviamos um link de confirmação para ativar sua conta EixoVerde.',
+        'emerald'
+      );
+      return { ok: true, needsEmailConfirmation: true };
+    }
+    if (res.user) {
+      const user = res.user;
+      set({ authUser: user, authModalOpen: false, cloudConfigured: hasSupabaseConfig() });
+      await syncEngine.setAuthenticatedUser(user.id);
+
+      const summary = await syncEngine.getLocalMigrationSummary();
+      if (summary.total > 0) {
+        set({ localMigrationSummary: summary, migrationPromptOpen: true });
+      } else {
+        await syncEngine.markInitialMigrationCompleted(user.id);
+        void syncEngine.syncNow({ force: true });
+      }
+      get().pushToast('Conta criada com sucesso!', `Bem-vindo(a), ${user.displayName || user.email}`, 'emerald');
+    }
+    return { ok: true };
+  },
+
+  async sendMagicLink(email) {
+    set({ authLoading: true });
+    const res = await signInWithMagicLink(email);
+    set({ authLoading: false });
+    if (res.error) {
+      return { ok: false, error: res.error };
+    }
+    get().pushToast('Link mágico enviado!', 'Verifique sua caixa de entrada para entrar sem senha.', 'emerald');
+    return { ok: true };
+  },
+
+  async requestPasswordReset(email) {
+    set({ authLoading: true });
+    const res = await sendPasswordReset(email);
+    set({ authLoading: false });
+    if (res.error) {
+      return { ok: false, error: res.error };
+    }
+    get().pushToast('E-mail de recuperação enviado!', 'Use o link recebido para redefinir sua senha.', 'emerald');
+    return { ok: true };
+  },
+
+  async completePasswordRecovery(newPassword) {
+    set({ authLoading: true });
+    const res = await updatePassword(newPassword);
+    set({ authLoading: false });
+    if (res.error) {
+      return { ok: false, error: res.error };
+    }
+    set({ authRecoveryMode: false, authModalOpen: false });
+    get().pushToast('Senha atualizada!', 'Sua nova senha já está ativa.', 'emerald');
+    return { ok: true };
+  },
+
+  async signOut() {
+    set({ authLoading: true });
+    // Flush pending outbox before signing out if online
+    if (get().authUser && get().pendingSyncCount > 0) {
+      try {
+        await syncEngine.syncNow({ force: true });
+      } catch {
+        // Proceed with local sign-out even if offline
+      }
+    }
+    await authSignOut();
+    await syncEngine.setAuthenticatedUser(null);
+    set({
+      authUser: null,
+      authLoading: false,
+      authRecoveryMode: false,
+      migrationPromptOpen: false,
+      syncStatus: hasSupabaseConfig() ? 'idle' : 'local',
+    });
+    get().pushToast('Sessão encerrada', 'Seus dados permanecem salvos neste dispositivo.', 'slate');
+  },
+
+  async syncNow() {
+    const ok = await syncEngine.syncNow({ force: true });
+    await get().hydrateFromStorage();
+    return ok;
+  },
+
+  async migrateLocalToCloud() {
+    set({ migrationPromptOpen: false });
+    const ok = await syncEngine.migrateLocalToCloud();
+    await get().hydrateFromStorage();
+    if (ok) {
+      get().pushToast('Dados sincronizados na nuvem!', 'Suas rotas, locais e veículos foram migrados com segurança.', 'emerald');
+    } else {
+      get().pushToast('Migração agendada', 'Seus dados serão sincronizados assim que a conexão estabilizar.', 'amber');
+    }
+    return ok;
+  },
+
+  async bootstrap() {
+    if (get().initialized) return;
+    await get().hydrateFromStorage();
+    set({ initialized: true });
+    void get().initAuthAndSync();
 
     // Check if opened from a shared route link (?share=...)
     const shared = decodeShareableRouteFromUrl();
@@ -495,7 +766,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   async addCustomVehicle(vehicle) {
-    await indexedDbStorage.saveCustomVehicle(vehicle);
+    await repository.saveCustomVehicle(vehicle);
     set((s) => ({
       customVehicles: [vehicle, ...s.customVehicles.filter((v) => v.id !== vehicle.id)],
       selectedVehicleId: vehicle.id,
@@ -506,7 +777,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   async deleteCustomVehicle(id) {
-    await indexedDbStorage.deleteCustomVehicle(id);
+    await repository.deleteCustomVehicle(id);
     set((s) => {
       const remaining = s.customVehicles.filter((v) => v.id !== id);
       const selectedVehicleId = s.selectedVehicleId === id ? PRESET_VEHICLES[0].id : s.selectedVehicleId;
@@ -768,7 +1039,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       originName: cand.originName,
       destName: cand.destName,
     };
-    await indexedDbStorage.saveRoute(route);
+    await repository.saveRoute(route);
     set((s) => ({ savedRoutes: [route, ...s.savedRoutes] }));
     get().pushToast('Rota salva no dispositivo', route.name, 'emerald');
   },
@@ -779,7 +1050,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const route = get().savedRoutes.find((r) => r.id === id);
     if (!route) return;
     const updated: SavedRoute = { ...route, name: trimmed, updatedAt: new Date().toISOString() };
-    await indexedDbStorage.saveRoute(updated);
+    await repository.saveRoute(updated);
     set((s) => ({
       savedRoutes: s.savedRoutes.map((r) => (r.id === id ? updated : r)),
     }));
@@ -787,7 +1058,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   async deleteSavedRoute(id) {
-    await indexedDbStorage.deleteRoute(id);
+    await repository.deleteRoute(id);
     set((s) => ({ savedRoutes: s.savedRoutes.filter((r) => r.id !== id) }));
     get().pushToast('Rota removida', undefined, 'slate');
   },
@@ -796,14 +1067,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const route = get().savedRoutes.find((r) => r.id === id);
     if (!route) return;
     const updated: SavedRoute = { ...route, isFavorite: !route.isFavorite, updatedAt: new Date().toISOString() };
-    await indexedDbStorage.saveRoute(updated);
+    await repository.saveRoute(updated);
     set((s) => ({
       savedRoutes: s.savedRoutes.map((r) => (r.id === id ? updated : r)),
     }));
   },
 
   async importSavedRoute(route) {
-    await indexedDbStorage.saveRoute(route);
+    await repository.saveRoute(route);
     set((s) => ({ savedRoutes: [route, ...s.savedRoutes] }));
     get().loadSavedRoute(route);
     get().pushToast('Rota importada com sucesso!', `${route.name} (${route.distanceKm} km)`, 'emerald');
@@ -829,7 +1100,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (category === 'home' || category === 'work') {
       const prevSlot = existing.find((p) => p.category === category);
       if (prevSlot) {
-        await indexedDbStorage.deletePlace(prevSlot.id);
+        await repository.deletePlace(prevSlot.id);
         nextPlaces = nextPlaces.filter((p) => p.id !== prevSlot.id);
       }
     }
@@ -844,7 +1115,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       updatedAt: now,
     };
 
-    await indexedDbStorage.savePlace(newPlace);
+    await repository.savePlace(newPlace);
     nextPlaces = [newPlace, ...nextPlaces];
 
     const slotPlace: PlaceResult = {
@@ -878,7 +1149,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const target = get().savedPlaces.find((p) => p.id === id);
     if (!target) return;
     const updated: SavedPlace = { ...target, label: trimmed, updatedAt: new Date().toISOString() };
-    await indexedDbStorage.savePlace(updated);
+    await repository.savePlace(updated);
 
     const slotPlace: PlaceResult = {
       id: updated.id,
@@ -908,13 +1179,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const prev = list.find((p) => p.category === category && p.id !== id);
       if (prev) {
         const demoted: SavedPlace = { ...prev, category: 'favorite', updatedAt: now };
-        await indexedDbStorage.savePlace(demoted);
+        await repository.savePlace(demoted);
         list = list.map((p) => (p.id === prev.id ? demoted : p));
       }
     }
 
     const updated: SavedPlace = { ...target, category, updatedAt: now };
-    await indexedDbStorage.savePlace(updated);
+    await repository.savePlace(updated);
     list = list.map((p) => (p.id === id ? updated : p));
 
     const homeSaved = list.find((p) => p.category === 'home');
@@ -939,7 +1210,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   async deleteSavedPlace(id) {
     const target = get().savedPlaces.find((p) => p.id === id);
-    await indexedDbStorage.deletePlace(id);
+    await repository.deletePlace(id);
     set((s) => ({
       savedPlaces: s.savedPlaces.filter((p) => p.id !== id),
       homePlace: target?.category === 'home' ? undefined : s.homePlace,
@@ -1057,35 +1328,49 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   async submitHazard(kind, title, note) {
     const coords = get().pendingHazardCoords ?? get().nav.currentPos ?? BRAND.defaultCenter;
+    const now = new Date().toISOString();
+    const authUser = get().authUser;
     const report: HazardReport = {
       id: `hazard-${Date.now()}`,
       kind,
       title,
       note: note?.trim() || undefined,
       coords,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       confirmations: 1,
+      userId: authUser?.id,
+      isCommunity: Boolean(authUser),
     };
-    await indexedDbStorage.saveHazard(report);
+    await repository.saveHazard(report);
     set((s) => ({
       hazards: [report, ...s.hazards],
       hazardPickerOpen: false,
       pendingHazardCoords: null,
       showHazards: true,
     }));
-    get().pushToast('Alerta registrado no mapa!', `${title} (salvo localmente; pronto para sync Fase 2)`, 'amber');
+    const suffix = authUser
+      ? 'sincronizado com a comunidade EixoVerde'
+      : 'salvo localmente neste dispositivo';
+    get().pushToast('Alerta registrado no mapa!', `${title} (${suffix})`, 'amber');
   },
 
   async confirmHazard(id) {
     const item = get().hazards.find((h) => h.id === id);
-    if (!item) return;
-    const updated = { ...item, confirmations: item.confirmations + 1 };
-    await indexedDbStorage.saveHazard(updated);
+    if (!item || item.confirmedByMe) return;
+    const updated: HazardReport = {
+      ...item,
+      confirmations: item.confirmations + 1,
+      confirmedByMe: true,
+      updatedAt: new Date().toISOString(),
+    };
+    await repository.confirmHazard(updated);
     set((s) => ({ hazards: s.hazards.map((h) => (h.id === id ? updated : h)) }));
+    get().pushToast('Alerta confirmado!', `${item.title} (${updated.confirmations} confirmações)`, 'emerald');
   },
 
   async deleteHazard(id) {
-    await indexedDbStorage.deleteHazard(id);
+    await repository.deleteHazard(id);
     set((s) => ({ hazards: s.hazards.filter((h) => h.id !== id) }));
   },
 

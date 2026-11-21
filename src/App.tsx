@@ -5,6 +5,12 @@ import { ToastStack } from './components/ui/ToastStack';
 import { useAppStore } from './store/useAppStore';
 
 // Lazy-load secondary modals, drawers, and active navigation overlay to keep initial mobile load fast
+const AuthModal = lazy(() =>
+  import('./components/auth/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+const MigrationPromptModal = lazy(() =>
+  import('./components/auth/MigrationPromptModal').then((m) => ({ default: m.MigrationPromptModal }))
+);
 const CompareBuyModal = lazy(() =>
   import('./components/catalog/CompareBuyModal').then((m) => ({ default: m.CompareBuyModal }))
 );
@@ -36,6 +42,8 @@ export function App() {
   const hazardPickerOpen = useAppStore((s) => s.hazardPickerOpen);
   const pendingSavePlace = useAppStore((s) => s.pendingSavePlace);
   const mapContextPin = useAppStore((s) => s.mapContextPin);
+  const authModalOpen = useAppStore((s) => s.authModalOpen);
+  const migrationPromptOpen = useAppStore((s) => s.migrationPromptOpen);
 
   useEffect(() => {
     void bootstrap();
@@ -63,6 +71,8 @@ export function App() {
         {compareOpen && <CompareBuyModal />}
         {hazardPickerOpen && <HazardReportModal />}
         {pendingSavePlace && <SavePlaceModal />}
+        {authModalOpen && <AuthModal />}
+        {migrationPromptOpen && <MigrationPromptModal />}
       </Suspense>
 
       <ToastStack />

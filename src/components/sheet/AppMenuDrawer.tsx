@@ -2,18 +2,24 @@ import {
   AlertTriangle,
   Bike,
   Bookmark,
+  CheckCircle2,
   Cloud,
+  CloudOff,
   Layers,
+  Loader2,
+  LogOut,
   MapPin,
   Moon,
+  RefreshCw,
   Satellite,
   ShoppingBag,
   Star,
   Sun,
+  UserCheck,
   X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
-import { hasMapTilerKey, hasOrsKey } from '../../config/providers';
+import { hasMapTilerKey, hasOrsKey, hasSupabaseConfig } from '../../config/providers';
 import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
 
 export function AppMenuDrawer() {
@@ -21,6 +27,7 @@ export function AppMenuDrawer() {
   const setMenuOpen = useAppStore((s) => s.setMenuOpen);
   const setGarageOpen = useAppStore((s) => s.setGarageOpen);
   const setCompareOpen = useAppStore((s) => s.setCompareOpen);
+  const setAuthModalOpen = useAppStore((s) => s.setAuthModalOpen);
   const setExploreTab = useAppStore((s) => s.setExploreTab);
   const clearActiveRoute = useAppStore((s) => s.clearActiveRoute);
   const theme = useAppStore((s) => s.theme);
@@ -37,14 +44,61 @@ export function AppMenuDrawer() {
   const hazards = useAppStore((s) => s.hazards);
   const currentLocationPlace = useAppStore((s) => s.currentLocationPlace);
 
+  const authUser = useAppStore((s) => s.authUser);
+  const syncStatus = useAppStore((s) => s.syncStatus);
+  const pendingSyncCount = useAppStore((s) => s.pendingSyncCount);
+  const syncError = useAppStore((s) => s.syncError);
+  const syncNow = useAppStore((s) => s.syncNow);
+  const signOut = useAppStore((s) => s.signOut);
+
   if (!open) return null;
 
+  const supabaseEnabled = hasSupabaseConfig();
   const locationParts = [currentLocationPlace?.district, currentLocationPlace?.city].filter(Boolean);
   const locationLabel =
     locationParts.length > 0
       ? locationParts.join(', ')
       : currentLocationPlace?.city || 'Brasília, DF';
   const versionSubtitle = `${locationLabel} • v${__APP_VERSION__}`;
+
+  const getSyncBadgeMeta = () => {
+    if (!supabaseEnabled) {
+      return {
+        label: 'Modo Local',
+        cls: 'bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+      };
+    }
+    if (!authUser) {
+      return {
+        label: 'Visitante',
+        cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+      };
+    }
+    if (syncStatus === 'syncing') {
+      return {
+        label: 'Sincronizando...',
+        cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+      };
+    }
+    if (syncStatus === 'offline') {
+      return {
+        label: pendingSyncCount > 0 ? `Offline (${pendingSyncCount})` : 'Offline',
+        cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+      };
+    }
+    if (syncStatus === 'error') {
+      return {
+        label: 'Atenção',
+        cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
+      };
+    }
+    return {
+      label: 'Sincronizado',
+      cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+    };
+  };
+
+  const badgeMeta = getSyncBadgeMeta();
 
   return (
     <div className="fixed inset-0 z-50 flex bg-slate-950/55 backdrop-blur-xs" onClick={() => setMenuOpen(false)}>
@@ -55,7 +109,11 @@ export function AppMenuDrawer() {
         {/* Brand Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div className="flex min-w-0 items-center gap-2.5">
-            <img src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`} alt={BRAND.name} className="h-9 w-9 shrink-0 rounded-xl shadow-sm" />
+            <img
+              src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`}
+              alt={BRAND.name}
+              className="h-9 w-9 shrink-0 rounded-xl shadow-sm"
+            />
             <div className="min-w-0">
               <div className="font-display text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
                 {BRAND.name}
@@ -68,14 +126,123 @@ export function AppMenuDrawer() {
           <button
             type="button"
             onClick={() => setMenuOpen(false)}
+            aria-label="Fechar menu"
             className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Navigation Links */}
+        {/* Navigation Links & Cloud Account Card */}
         <div className="flex-1 space-y-5 overflow-y-auto p-4 ev-scroll">
+          {/* Phase 2 Account & Cloud Sync Card */}
+          <div
+            id="eixoverde-account-card"
+            className="rounded-2xl border border-slate-200/80 bg-slate-50/90 p-3.5 dark:border-slate-800 dark:bg-slate-800/60"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                {authUser ? (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xs font-extrabold text-white">
+                    {(authUser.displayName || authUser.email || 'E')[0].toUpperCase()}
+                  </span>
+                ) : supabaseEnabled ? (
+                  <Cloud className="h-4.5 w-4.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <CloudOff className="h-4.5 w-4.5 shrink-0 text-slate-400" />
+                )}
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-extrabold text-slate-900 dark:text-white">
+                    {authUser
+                      ? authUser.displayName || authUser.email
+                      : supabaseEnabled
+                        ? 'Conta EixoVerde Cloud'
+                        : 'Armazenamento Local'}
+                  </div>
+                  {authUser && (
+                    <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {authUser.email}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <span
+                id="eixoverde-sync-status"
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${badgeMeta.cls}`}
+              >
+                {syncStatus === 'syncing' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : authUser && syncStatus === 'synced' ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : null}
+                {badgeMeta.label}
+              </span>
+            </div>
+
+            {!supabaseEnabled && (
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                Suas rotas, locais e veículos ficam salvos offline neste dispositivo.
+              </p>
+            )}
+
+            {supabaseEnabled && !authUser && (
+              <div className="mt-2.5 space-y-2">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Entre para sincronizar rotas, locais salvos, garagem e alertas comunitários.
+                </p>
+                <button
+                  id="eixoverde-auth-open-btn"
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAuthModalOpen(true);
+                  }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-500"
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Entrar ou Criar Conta
+                </button>
+              </div>
+            )}
+
+            {supabaseEnabled && authUser && (
+              <div className="mt-2.5 space-y-2">
+                {syncError && (
+                  <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                    {syncError}
+                  </p>
+                )}
+                {pendingSyncCount > 0 && !syncError && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    {pendingSyncCount} alteração(ões) aguardando conexão
+                  </p>
+                )}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    id="eixoverde-sync-now-btn"
+                    type="button"
+                    disabled={syncStatus === 'syncing'}
+                    onClick={() => void syncNow()}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-500/40 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                    Sincronizar
+                  </button>
+                  <button
+                    id="eixoverde-signout-btn"
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sair
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <button
               type="button"
@@ -134,8 +301,8 @@ export function AppMenuDrawer() {
             >
               <ShoppingBag className="h-4.5 w-4.5 text-sky-600" />
               <div className="flex-1">
-                <div className="text-sm font-semibold">Comparar & Comprar</div>
-                <div className="text-[11px] text-slate-400">Patinetes, E-Bikes & custo-benefício</div>
+                <div className="text-sm font-semibold">Comparar &amp; Comprar</div>
+                <div className="text-[11px] text-slate-400">Patinetes, E-Bikes &amp; custo-benefício</div>
               </div>
             </button>
           </div>
@@ -143,7 +310,7 @@ export function AppMenuDrawer() {
           {/* Map Layer Toggles */}
           <div>
             <div className="mb-2 px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Camadas & Aparência
+              Camadas &amp; Aparência
             </div>
             <div className="space-y-1">
               <button
@@ -167,7 +334,7 @@ export function AppMenuDrawer() {
               >
                 <span className="inline-flex items-center gap-2.5">
                   <MapPin className="h-4 w-4 text-sky-600" />
-                  Bicicletários & Oficinas
+                  Bicicletários &amp; Oficinas
                 </span>
                 <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${showPois ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
                   <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${showPois ? 'translate-x-4' : ''}`} />
@@ -216,25 +383,25 @@ export function AppMenuDrawer() {
             </div>
           </div>
 
-          {/* Engine & Phase 2 Status */}
+          {/* Engine & Cloud Status */}
           <div className="space-y-2 rounded-2xl bg-slate-100/80 p-3.5 text-xs dark:bg-slate-800/60">
             <div className="font-bold text-slate-700 dark:text-slate-200">Motores Ativos</div>
             <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span>Mapa Vetorial</span>
               <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                {hasMapTilerKey() ? 'MapTiler Cloud' : 'OpenFreeMap (Grátis)'}
+                {hasMapTilerKey() ? 'MapTiler Cloud' : 'OpenFreeMap'}
               </span>
             </div>
             <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span>Roteamento Seguro</span>
               <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                {hasOrsKey() ? 'OpenRouteService' : 'BRouter / OSRM'}
+                {supabaseEnabled ? 'ORS Edge Proxy' : hasOrsKey() ? 'OpenRouteService' : 'BRouter / OSRM'}
               </span>
             </div>
-            <div className="mt-2 flex items-start gap-2 border-t border-slate-200/80 pt-2 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              <Cloud className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
-              <span>
-                <strong>Fase 1 Local-First:</strong> suas rotas, veículos e alertas ficam salvos offline no dispositivo, prontos para sincronizar com conta na Fase 2.
+            <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+              <span>Sincronização</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                {supabaseEnabled ? 'Supabase Cloud + Offline' : 'IndexedDB Offline-First'}
               </span>
             </div>
           </div>

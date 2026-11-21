@@ -51,6 +51,8 @@ export interface VehicleSpec {
   pros?: string;
   cons?: string;
   buyUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PlaceResult {
@@ -153,7 +155,11 @@ export interface HazardReport {
   note?: string;
   coords: LngLat;
   createdAt: string;
+  updatedAt?: string;
   confirmations: number;
+  userId?: string;
+  isCommunity?: boolean;
+  confirmedByMe?: boolean;
 }
 
 export interface RouteTelemetry {
@@ -196,4 +202,58 @@ export interface UserPreferences {
   showHazards: boolean;
   homePlace?: PlaceResult;
   workPlace?: PlaceResult;
+  updatedAt?: string;
 }
+
+// === Phase 2: Cloud Auth & Offline-First Sync Types ===
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+export type SyncStatus = 'local' | 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
+
+export type SyncEntityType =
+  | 'saved_routes'
+  | 'saved_places'
+  | 'custom_vehicles'
+  | 'hazard_reports'
+  | 'user_preferences';
+
+export interface SyncOutboxItem {
+  id: string; // `${entity}:${recordId}` for automatic per-record coalescing
+  entity: SyncEntityType;
+  recordId: string;
+  operation: 'upsert' | 'delete' | 'confirm';
+  payload?: unknown;
+  updatedAt: string;
+  attempts: number;
+  nextRetryAt?: number;
+  lastError?: string;
+}
+
+export interface SyncTombstone {
+  key: string; // `${entity}:${recordId}`
+  entity: SyncEntityType;
+  recordId: string;
+  deletedAt: string;
+}
+
+export interface LocalMigrationSummary {
+  routes: number;
+  places: number;
+  vehicles: number;
+  hazards: number;
+  total: number;
+}
+
+export interface SyncStateSnapshot {
+  status: SyncStatus;
+  pendingCount: number;
+  lastSyncedAt: string | null;
+  error: string | null;
+}
+
