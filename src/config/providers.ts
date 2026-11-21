@@ -68,9 +68,9 @@ export function getMapStyle(theme: ThemeMode, basemap: MapBasemapMode): string |
 }
 
 export const ENDPOINTS = {
-  orsCyclingRegular: 'https://api.openrouteservice.org/v2/directions/cycling-regular/geojson',
-  orsCyclingElectric: 'https://api.openrouteservice.org/v2/directions/cycling-electric/geojson',
-  orsCyclingRoad: 'https://api.openrouteservice.org/v2/directions/cycling-road/geojson',
+  orsCyclingRegular: 'https://api.heigit.org/openrouteservice/v2/directions/cycling-regular/geojson',
+  orsCyclingElectric: 'https://api.heigit.org/openrouteservice/v2/directions/cycling-electric/geojson',
+  orsCyclingRoad: 'https://api.heigit.org/openrouteservice/v2/directions/cycling-road/geojson',
   brouter: 'https://brouter.de/brouter',
   osrmBike: 'https://routing.openstreetmap.de/routed-bike/route/v1/driving',
   photonSearch: 'https://photon.komoot.io/api/',

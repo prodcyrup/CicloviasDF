@@ -73,6 +73,7 @@ interface AppStore {
   // Planner & Active Route
   origin: PlaceResult | null;
   destination: PlaceResult | null;
+  currentLocationPlace: PlaceResult | null;
   viaPoints: LngLat[];
   isRouting: boolean;
   candidates: RouteCandidate[];
@@ -101,6 +102,8 @@ interface AppStore {
 
   // Actions
   bootstrap: () => Promise<void>;
+  locateCurrentPosition: (options?: { silent?: boolean; flyToUser?: boolean }) => Promise<PlaceResult | null>;
+  useCurrentLocationAsOrigin: () => Promise<void>;
   setMode: (mode: AppMode) => void;
   toggleTheme: () => void;
   toggleBasemap: () => void;
@@ -119,8 +122,8 @@ interface AppStore {
   deleteCustomVehicle: (id: string) => Promise<void>;
 
   // Place & Planning actions
-  setOrigin: (place: PlaceResult | null) => void;
-  setDestination: (place: PlaceResult | null, autoPlan?: boolean) => void;
+  setOrigin: (place: PlaceResult | null, autoPlan?: boolean) => void;
+  setDestination: (place: PlaceResult | null, autoPlan?: boolean) => Promise<void>;
   swapOriginDest: () => void;
   setMapPickTarget: (target: MapPickTarget) => void;
   handleMapClick: (coords: LngLat) => Promise<void>;
@@ -226,6 +229,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   origin: null,
   destination: null,
+  currentLocationPlace: null,
   viaPoints: [],
   isRouting: false,
   candidates: [],
@@ -309,6 +313,68 @@ export const useAppStore = create<AppStore>((set, get) => ({
       });
       await get().recalculateRoute(shared.waypoints);
       get().pushToast('Rota compartilhada aberta', shared.name, 'emerald');
+      return;
+    }
+
+    // Automatically locate user's real GPS position on startup so Point A is always accurate
+    void get().locateCurrentPosition({ silent: true, flyToUser: true });
+  },
+
+  async locateCurrentPosition({ silent = false, flyToUser = false } = {}) {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      if (!silent) {
+        get().pushToast('GPS indisponível', 'Seu navegador não suporta geolocalização.', 'amber');
+      }
+      return null;
+    }
+
+    const coords = await new Promise<{ pos: LngLat; acc: number } | null>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (p) =>
+          resolve({
+            pos: [+p.coords.longitude.toFixed(6), +p.coords.latitude.toFixed(6)],
+            acc: Math.round(p.coords.accuracy || 0),
+          }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 6500, maximumAge: 25000 }
+      );
+    });
+
+    if (!coords) {
+      if (!silent) {
+        get().pushToast('Permissão de GPS necessária', 'Ative a localização no navegador para usar seu ponto atual.', 'amber');
+      }
+      return null;
+    }
+
+    set((s) => ({
+      nav: { ...s.nav, currentPos: coords.pos, accuracyMeters: coords.acc },
+    }));
+
+    if (flyToUser && get().mode === 'explore') {
+      get().flyTo(coords.pos, 15.2);
+    }
+
+    const rev = await reverseGeocode(coords.pos);
+    const gpsPlace: PlaceResult = {
+      ...rev,
+      id: 'gps-current',
+      name: rev.name && rev.name !== 'Ponto Selecionado' ? `Minha localização (${rev.name})` : 'Minha localização atual',
+      coords: coords.pos,
+      source: 'gps',
+    };
+    set({ currentLocationPlace: gpsPlace });
+    return gpsPlace;
+  },
+
+  async useCurrentLocationAsOrigin() {
+    const gpsPlace = (await get().locateCurrentPosition({ silent: false, flyToUser: false })) ?? get().currentLocationPlace;
+    if (!gpsPlace) return;
+    set({ origin: gpsPlace });
+    if (get().destination) {
+      await get().recalculateRoute();
+    } else {
+      get().flyTo(gpsPlace.coords, 15.5);
     }
   },
 
@@ -404,35 +470,46 @@ export const useAppStore = create<AppStore>((set, get) => ({
     persistPrefs(get());
   },
 
-  setOrigin(place) {
+  setOrigin(place, autoPlan = true) {
     set({ origin: place });
+    if (place && autoPlan && get().destination) {
+      void get().recalculateRoute();
+    }
   },
 
-  setDestination(place, autoPlan = true) {
+  async setDestination(place, autoPlan = true) {
     set({ destination: place });
     if (place && autoPlan) {
-      // If no origin is set yet, use live GPS position or default Brasília center
       if (!get().origin) {
-        const gps = get().nav.currentPos;
+        set({ mode: 'preview', isRouting: true });
+        let resolvedOrigin = get().currentLocationPlace;
+        if (!resolvedOrigin) {
+          const cachedGps = get().nav.currentPos;
+          if (cachedGps) {
+            resolvedOrigin = {
+              id: 'gps-current',
+              name: 'Minha localização atual',
+              subtitle: `${cachedGps[1].toFixed(4)}, ${cachedGps[0].toFixed(4)}`,
+              coords: cachedGps,
+              source: 'gps',
+            };
+          } else {
+            resolvedOrigin = await get().locateCurrentPosition({ silent: true, flyToUser: false });
+          }
+        }
+
         set({
-          origin: gps
-            ? {
-                id: 'gps-origin',
-                name: 'Minha localização atual',
-                subtitle: `${gps[1].toFixed(4)}, ${gps[0].toFixed(4)}`,
-                coords: gps,
-                source: 'gps',
-              }
-            : {
-                id: 'default-bsb-origin',
-                name: 'Rodoviária / Centro de Brasília',
-                subtitle: 'Plano Piloto, Brasília - DF',
-                coords: BRAND.defaultCenter,
-                source: 'curated',
-              },
+          origin:
+            resolvedOrigin ?? {
+              id: 'default-bsb-origin',
+              name: 'Centro de Brasília (GPS indisponível)',
+              subtitle: 'Toque no Ponto A para definir sua partida',
+              coords: BRAND.defaultCenter,
+              source: 'curated',
+            },
         });
       }
-      void get().recalculateRoute();
+      await get().recalculateRoute();
     }
   },
 
@@ -549,6 +626,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   clearActiveRoute() {
     set({
       mode: 'explore',
+      origin: null,
       destination: null,
       viaPoints: [],
       candidates: [],

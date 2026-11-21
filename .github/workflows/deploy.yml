@@ -32,7 +32,7 @@ jobs:
 
       - name: Build production bundle
         env:
-          VITE_BASE_PATH: /CicloviasDF/
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_MAPTILER_KEY: ${{ secrets.VITE_MAPTILER_KEY }}
           VITE_ORS_KEY: ${{ secrets.VITE_ORS_KEY }}
         run: npm run build

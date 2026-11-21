@@ -19,12 +19,12 @@ npm run dev
 
 ## Chaves de API Gratuitas (Opcional)
 
-O app funciona **imediatamente sem nenhuma chave** usando fallback gratuito (**OpenFreeMap** + **BRouter / OSRM**). Para ativar estilos **MapTiler Cloud** (Light/Dark/Satélite) e roteamento **OpenRouteService** (2.000 rotas/dia grátis), configure as variáveis em `.env.local` (desenvolvimento) ou em **Settings → Secrets and variables → Actions** no GitHub:
+O app funciona **imediatamente sem nenhuma chave** usando fallback gratuito (**OpenFreeMap** + **BRouter / OSRM**). Para ativar estilos **MapTiler Cloud** (Light/Dark/Satélite) e roteamento **OpenRouteService / HeiGIT** (2.000 rotas/dia grátis), configure as variáveis em `.env.local` (desenvolvimento) ou em **Settings → Secrets and variables → Actions → Repository secrets** no GitHub:
 
-- `VITE_MAPTILER_KEY` — https://cloud.maptiler.com/
-- `VITE_ORS_KEY` — https://openrouteservice.org/dev/#/signup
+- `VITE_MAPTILER_KEY` — https://cloud.maptiler.com/ (em *Allowed HTTP Origins*, use `prodcyrup.github.io` e `localhost`, um por linha)
+- `VITE_ORS_KEY` — https://account.heigit.org/ (copie sua *Basic Key* do OpenRouteService)
 
 ## Deploy Automático no GitHub Pages
 
-O workflow [.github/workflows/deploy.yml](.github/workflows/deploy.yml) compila e publica automaticamente no GitHub Pages a cada push na branch `main`.
+O workflow [.github/workflows/deploy.yml](.github/workflows/deploy.yml) detecta automaticamente o nome do repositório (`/${{ github.event.repository.name }}/`) e publica no GitHub Pages a cada push na branch `main`.
 No repositório do GitHub, basta selecionar **Settings → Pages → Build and deployment → Source: GitHub Actions**.

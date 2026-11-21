@@ -360,7 +360,7 @@ export function ExplorePanel() {
               Nenhuma rota salva ainda
             </p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Pesquise um destino, importe um arquivo GPX do Komoot ou favorite uma rota de Brasília.
+              Pesquise um destino, importe um arquivo GPX/KML ou favorite uma rota para acessá-la aqui.
             </p>
           </div>
         )}

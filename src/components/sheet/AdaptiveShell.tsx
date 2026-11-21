@@ -6,7 +6,9 @@ import {
   ChevronUp,
   Layers,
   LocateFixed,
+  Maximize2,
   Menu,
+  Minimize2,
   Moon,
   Satellite,
   Sun,
@@ -14,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
+import { useFullscreen } from '../../hooks/useFullscreen';
 import { useAppStore } from '../../store/useAppStore';
 import { RoutePreviewPanel } from '../planner/RoutePreviewPanel';
 import { ExplorePanel } from '../search/ExplorePanel';
@@ -23,6 +26,7 @@ type MobileSheetSnap = 'peek' | 'half' | 'full';
 export function AdaptiveShell() {
   const [sheetSnap, setSheetSnap] = useState<MobileSheetSnap>('half');
   const [legendOpen, setLegendOpen] = useState(false);
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
 
   const mode = useAppStore((s) => s.mode);
   const theme = useAppStore((s) => s.theme);
@@ -39,28 +43,17 @@ export function AdaptiveShell() {
   const setMapPickTarget = useAppStore((s) => s.setMapPickTarget);
   const openHazardReporter = useAppStore((s) => s.openHazardReporter);
   const flyTo = useAppStore((s) => s.flyTo);
-  const updateNavTelemetry = useAppStore((s) => s.updateNavTelemetry);
-  const pushToast = useAppStore((s) => s.pushToast);
+  const locateCurrentPosition = useAppStore((s) => s.locateCurrentPosition);
 
   const activeVehicle = getActiveVehicle();
 
-  const handleLocateMe = () => {
-    if (!('geolocation' in navigator)) {
+  const handleLocateMe = async () => {
+    const found = await locateCurrentPosition({ silent: false, flyToUser: false });
+    if (found) {
+      flyTo(found.coords, 15.6);
+    } else {
       flyTo(BRAND.defaultCenter, 13.5);
-      return;
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        updateNavTelemetry({ currentPos: coords, accuracyMeters: Math.round(pos.coords.accuracy || 0) });
-        flyTo(coords, 15.6);
-      },
-      () => {
-        pushToast('Usando centro de Brasília', 'Ative o GPS no navegador para ver sua posição exata.', 'slate');
-        flyTo(BRAND.defaultCenter, 13.5);
-      },
-      { enableHighAccuracy: true, timeout: 7000 }
-    );
   };
 
   const pickLabels: Record<string, string> = {
@@ -121,7 +114,7 @@ export function AdaptiveShell() {
           <button
             type="button"
             onClick={() => setGarageOpen(true)}
-            className="glass-panel flex max-w-[155px] items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-bold text-slate-800 shadow-lg dark:text-slate-100"
+            className="glass-panel flex max-w-[130px] items-center gap-1.5 rounded-2xl px-2.5 py-2 text-xs font-bold text-slate-800 shadow-lg dark:text-slate-100"
           >
             {activeVehicle.isElectric ? (
               <Zap className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -129,6 +122,15 @@ export function AdaptiveShell() {
               <Bike className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
             )}
             <span className="truncate">{activeVehicle.name.split('(')[0].trim()}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void toggleFullscreen()}
+            aria-label={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+            className="glass-panel flex h-9 w-9 items-center justify-center rounded-2xl text-slate-700 shadow-lg dark:text-slate-100"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
           <button
             type="button"
@@ -141,7 +143,7 @@ export function AdaptiveShell() {
         </div>
       </header>
 
-      {/* DESKTOP FLOATING LEFT SIDEBAR (Komoot / Google Maps Hybrid) */}
+      {/* DESKTOP FLOATING LEFT SIDEBAR */}
       <aside className="glass-panel fixed bottom-4 left-4 top-4 z-20 hidden w-[410px] flex-col overflow-hidden rounded-3xl shadow-2xl lg:flex">
         {/* Desktop Top Header */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 px-4 py-3.5 dark:border-slate-800/80">
@@ -175,7 +177,7 @@ export function AdaptiveShell() {
               type="button"
               onClick={() => setGarageOpen(true)}
               title="Minha Garagem — escolher ou cadastrar veículo"
-              className="flex max-w-[135px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 transition-colors hover:border-emerald-500/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="flex max-w-[115px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-800 transition-colors hover:border-emerald-500/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               {activeVehicle.isElectric ? (
                 <Zap className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -187,8 +189,17 @@ export function AdaptiveShell() {
 
             <button
               type="button"
+              onClick={() => void toggleFullscreen()}
+              title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+              className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+
+            <button
+              type="button"
               onClick={toggleTheme}
-              title="Tema Claro (Komoot) / Escuro (Waze)"
+              title="Alternar tema claro / escuro"
               className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}

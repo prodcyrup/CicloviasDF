@@ -617,7 +617,7 @@ export function EixoVerdeMap() {
     }
   }, [hoverCoordIndex, candidates, selectedCandidateIdx]);
 
-  // Live GPS / Demo Navigation Puck & 3D Waze Camera Follow
+  // Live GPS / Demo Navigation Puck & Camera Follow
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -650,25 +650,45 @@ export function EixoVerdeMap() {
     }
 
     if (mode === 'navigate' && nav.followUser) {
+      const targetPitch = nav.pitch3D ? 56 : 0;
+      const targetBearing = nav.pitch3D ? nav.currentHeading : 0;
       map.easeTo({
         center: nav.currentPos,
         zoom: Math.max(map.getZoom(), 16.4),
-        bearing: nav.pitch3D ? nav.currentHeading : 0,
-        pitch: nav.pitch3D ? 56 : 0,
-        duration: 420,
+        bearing: targetBearing,
+        pitch: targetPitch,
+        duration: 280,
         easing: (t) => t,
       });
     }
-  }, [nav.currentPos, nav.currentHeading, nav.followUser, nav.pitch3D, mode]);
+  }, [nav.currentPos, nav.currentHeading, nav.followUser, mode]);
 
-  // Reset camera pitch when exiting navigation
+  // Dedicated 3D / 2D Camera Toggle (works reliably on mobile & desktop, even if followUser is paused or GPS is waiting)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (mode !== 'navigate' && (map.getPitch() > 5 || Math.abs(map.getBearing()) > 1)) {
-      map.easeTo({ pitch: 0, bearing: 0, duration: 550 });
+
+    if (mode === 'navigate') {
+      map.stop();
+      if (nav.pitch3D) {
+        map.touchPitch.enable();
+        map.easeTo({
+          pitch: 56,
+          bearing: useAppStore.getState().nav.currentHeading,
+          duration: 320,
+        });
+      } else {
+        // Lock 2D North-Up cleanly on mobile so two-finger gestures or compass ticks never re-tilt
+        map.touchPitch.disable();
+        map.jumpTo({ pitch: 0, bearing: 0 });
+      }
+    } else {
+      map.touchPitch.enable();
+      if (map.getPitch() > 2 || Math.abs(map.getBearing()) > 1) {
+        map.easeTo({ pitch: 0, bearing: 0, duration: 450 });
+      }
     }
-  }, [mode]);
+  }, [nav.pitch3D, mode]);
 
   return (
     <div
