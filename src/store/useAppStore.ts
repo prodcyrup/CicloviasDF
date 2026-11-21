@@ -22,7 +22,16 @@ import {
 } from '../engine/geo';
 import { decodeShareableRouteFromUrl } from '../engine/gpx';
 import { extractRouteManeuvers } from '../engine/navigation';
+import {
+  type ActiveRideRecording,
+  appendRideSample,
+  createRideRecording,
+  finalizeRideRecording,
+  rideSessionToSavedRoute,
+} from '../engine/rideRecorder';
 import { planMultiProfileRoutes, reverseGeocode } from '../engine/routing';
+import { computeUpdatedBatteryCalibration } from '../engine/telemetry';
+import { fetchLiveWeather } from '../engine/weather';
 import { repository } from '../storage/repository';
 import { syncEngine } from '../storage/syncEngine';
 import type {
@@ -34,6 +43,7 @@ import type {
   LocalMigrationSummary,
   MapBasemapMode,
   PlaceResult,
+  RideSession,
   RouteCandidate,
   SavedPlace,
   SavedPlaceCategory,
@@ -41,8 +51,10 @@ import type {
   SyncStatus,
   ThemeMode,
   UserPreferences,
+  VehicleBatteryCalibration,
   VehicleSpec,
   VoiceMode,
+  WeatherSnapshot,
 } from '../types';
 
 export type MapPickTarget =
@@ -65,6 +77,7 @@ export interface ToastMessage {
 interface NavState {
   isTracking: boolean;
   isDemoMode: boolean;
+  isFreeRide: boolean;
   followUser: boolean;
   pitch3D: boolean;
   currentPos: LngLat | null;
@@ -108,6 +121,15 @@ export interface AppStore {
   isRoundTrip: boolean;
   homePlace?: PlaceResult;
   workPlace?: PlaceResult;
+  batteryCalibrations: Record<string, VehicleBatteryCalibration>;
+
+  // Phase 3: Live Open-Meteo Weather & Recorded Ride Sessions
+  weather: WeatherSnapshot | null;
+  weatherLoading: boolean;
+  rideSessions: RideSession[];
+  activeRide: ActiveRideRecording | null;
+  pendingRideSummary: RideSession | null;
+  replayingRideId: string | null;
 
   // Planner & Active Route
   origin: PlaceResult | null;
@@ -127,7 +149,7 @@ export interface AppStore {
   savedRoutes: SavedRoute[];
   savedPlaces: SavedPlace[];
   hazards: HazardReport[];
-  exploreTab: 'routes' | 'places';
+  exploreTab: 'routes' | 'places' | 'rides';
 
   // Live Navigation
   nav: NavState;
@@ -162,6 +184,23 @@ export interface AppStore {
   syncNow: () => Promise<boolean>;
   migrateLocalToCloud: () => Promise<boolean>;
 
+  // Phase 3: Weather, Ride Recording, History & Battery Calibration actions
+  refreshWeather: (coords?: LngLat) => Promise<void>;
+  startFreeRide: () => void;
+  recordRideSample: (sample: { lng: number; lat: number; ele?: number; speedKmh: number; ts?: number }) => void;
+  toggleRidePause: () => void;
+  savePendingRideSummary: (opts?: {
+    title?: string;
+    batteryStartPct?: number;
+    batteryEndPct?: number;
+    applyCalibration?: boolean;
+  }) => Promise<void>;
+  discardPendingRideSummary: () => void;
+  deleteRideSession: (id: string) => Promise<void>;
+  saveRideAsRoute: (id: string) => Promise<void>;
+  setReplayingRideId: (id: string | null) => void;
+  resetVehicleCalibration: (vehicleId: string) => void;
+
   locateCurrentPosition: (options?: { silent?: boolean; flyToUser?: boolean }) => Promise<PlaceResult | null>;
   useCurrentLocationAsOrigin: () => Promise<void>;
   setMode: (mode: AppMode) => void;
@@ -169,7 +208,7 @@ export interface AppStore {
   toggleBasemap: () => void;
   cycleVoiceMode: () => void;
   toggleLayer: (layer: 'lanes' | 'pois' | 'hazards') => void;
-  setExploreTab: (tab: 'routes' | 'places') => void;
+  setExploreTab: (tab: 'routes' | 'places' | 'rides') => void;
 
   // Vehicle actions
   getAllVehicles: () => VehicleSpec[];
@@ -287,6 +326,7 @@ function persistPrefs(state: AppStore): void {
     showHazards: state.showHazards,
     homePlace: state.homePlace,
     workPlace: state.workPlace,
+    batteryCalibrations: state.batteryCalibrations,
   };
   void repository.savePreferences(prefs);
 }
@@ -318,6 +358,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
   selectedModeIndex: 1,
   riderWeightKg: 70,
   isRoundTrip: false,
+  batteryCalibrations: {},
+
+  weather: null,
+  weatherLoading: false,
+  rideSessions: [],
+  activeRide: null,
+  pendingRideSummary: null,
+  replayingRideId: null,
 
   origin: null,
   destination: null,
@@ -340,6 +388,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   nav: {
     isTracking: false,
     isDemoMode: false,
+    isFreeRide: false,
     followUser: true,
     pitch3D: true,
     currentPos: null,
@@ -362,12 +411,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
   toasts: [],
 
   async hydrateFromStorage() {
-    const [prefs, userRoutes, savedPlaces, customVehicles, hazards] = await Promise.all([
+    const [prefs, userRoutes, savedPlaces, customVehicles, hazards, rideSessions] = await Promise.all([
       repository.getPreferences(),
       repository.getSavedRoutes(),
       repository.getSavedPlaces(),
       repository.getCustomVehicles(),
       repository.getHazards(),
+      repository.getRideSessions(),
     ]);
 
     const theme: ThemeMode = prefs.theme ?? get().theme ?? 'light';
@@ -397,10 +447,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
       workPlace: workSaved
         ? { id: workSaved.id, name: workSaved.label, subtitle: workSaved.address, coords: workSaved.coords, source: 'curated' }
         : prefs.workPlace,
+      batteryCalibrations: prefs.batteryCalibrations ?? get().batteryCalibrations ?? {},
       customVehicles,
       savedRoutes: mergedRoutes,
       savedPlaces,
       hazards,
+      rideSessions,
     });
   },
 
@@ -627,6 +679,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     await get().hydrateFromStorage();
     set({ initialized: true });
     void get().initAuthAndSync();
+    void get().refreshWeather(BRAND.defaultCenter);
 
     // Check if opened from a shared route link (?share=...)
     const shared = decodeShareableRouteFromUrl();
@@ -646,6 +699,184 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     // Automatically locate user's real GPS position on startup so Point A is always accurate
     void get().locateCurrentPosition({ silent: true, flyToUser: true });
+  },
+
+  async refreshWeather(coords) {
+    const target =
+      coords ??
+      get().candidates[get().selectedCandidateIdx]?.waypoints[0] ??
+      get().nav.currentPos ??
+      BRAND.defaultCenter;
+    set({ weatherLoading: true });
+    const snapshot = await fetchLiveWeather(target);
+    set((s) => ({
+      weather: snapshot ?? s.weather,
+      weatherLoading: false,
+    }));
+  },
+
+  startFreeRide() {
+    const state = get();
+    const vehicle = selectActiveVehicle(state);
+    const startPos = state.nav.currentPos ?? BRAND.defaultCenter;
+    const rec = createRideRecording({
+      mode: 'free_ride',
+      vehicle,
+      vehicleModeIndex: state.selectedModeIndex,
+      initialPos: state.nav.currentPos,
+    });
+    set((s) => ({
+      mode: 'navigate',
+      isEditingWaypoints: false,
+      mapPickTarget: null,
+      replayingRideId: null,
+      activeRide: rec,
+      nav: {
+        ...s.nav,
+        isTracking: true,
+        isDemoMode: false,
+        isFreeRide: true,
+        followUser: true,
+        pitch3D: true,
+        distanceAlongM: 0,
+        offRouteMeters: 0,
+        currentSpeedKmh: 0,
+        currentPos: startPos,
+      },
+    }));
+    get().pushToast('Pedal Livre iniciado!', 'Gravando trajeto com auto-pausa inteligente.', 'emerald');
+  },
+
+  recordRideSample(sample) {
+    const cur = get().activeRide;
+    if (!cur) return;
+    const next = appendRideSample(cur, sample);
+    set({ activeRide: next });
+  },
+
+  toggleRidePause() {
+    const cur = get().activeRide;
+    if (!cur) return;
+    const nextManual = !cur.manualPaused;
+    set({
+      activeRide: {
+        ...cur,
+        manualPaused: nextManual,
+        isPaused: nextManual || cur.autoPaused,
+        lastTickMs: Date.now(),
+      },
+    });
+  },
+
+  async savePendingRideSummary(opts) {
+    const pending = get().pendingRideSummary;
+    if (!pending) return;
+
+    const cleanTitle = opts?.title?.trim() || pending.title;
+    const hasBatteryInput =
+      pending.isElectric &&
+      typeof opts?.batteryStartPct === 'number' &&
+      typeof opts?.batteryEndPct === 'number' &&
+      opts.batteryStartPct > opts.batteryEndPct;
+
+    const actualUsedPct = hasBatteryInput
+      ? Math.max(0, Math.min(100, Math.round(opts!.batteryStartPct! - opts!.batteryEndPct!)))
+      : undefined;
+
+    const nowIso = new Date().toISOString();
+    const finalized: RideSession = {
+      ...pending,
+      title: cleanTitle,
+      batteryStartPct: hasBatteryInput ? Math.round(opts!.batteryStartPct!) : undefined,
+      batteryEndPct: hasBatteryInput ? Math.round(opts!.batteryEndPct!) : undefined,
+      batteryUsedPct: actualUsedPct,
+      updatedAt: nowIso,
+    };
+
+    await repository.saveRideSession(finalized);
+
+    let calibrationUpdated = false;
+    let nextCalibrations = { ...get().batteryCalibrations };
+
+    // Only real (non-demo) electric rides calibrate real-world vehicle battery efficiency
+    if (
+      !finalized.isDemo &&
+      finalized.isElectric &&
+      opts?.applyCalibration !== false &&
+      typeof actualUsedPct === 'number' &&
+      typeof finalized.estimatedBatteryUsedPct === 'number'
+    ) {
+      const updatedCal = computeUpdatedBatteryCalibration({
+        vehicleId: finalized.vehicleId,
+        previous: nextCalibrations[finalized.vehicleId],
+        distanceKm: finalized.distanceKm,
+        actualBatteryUsedPct: actualUsedPct,
+        nominalEstimatedBatteryUsedPct: finalized.estimatedBatteryUsedPct,
+        nowIso,
+      });
+      if (updatedCal) {
+        nextCalibrations = { ...nextCalibrations, [finalized.vehicleId]: updatedCal };
+        calibrationUpdated = true;
+      }
+    }
+
+    set((s) => ({
+      rideSessions: [finalized, ...s.rideSessions.filter((r) => r.id !== finalized.id)],
+      pendingRideSummary: null,
+      batteryCalibrations: nextCalibrations,
+    }));
+
+    if (calibrationUpdated) {
+      persistPrefs(get());
+      const multPct = Math.round(nextCalibrations[finalized.vehicleId].efficiencyMultiplier * 100);
+      get().pushToast(
+        'Pedal salvo & bateria calibrada!',
+        `${finalized.vehicleName} ajustado para ${multPct}% da autonomia nominal.`,
+        'emerald'
+      );
+    } else {
+      get().pushToast('Pedal salvo em Meus Pedais!', `${finalized.title} • ${finalized.distanceKm.toFixed(1).replace('.', ',')} km`, 'emerald');
+    }
+  },
+
+  discardPendingRideSummary() {
+    set({ pendingRideSummary: null });
+  },
+
+  async deleteRideSession(id) {
+    await repository.deleteRideSession(id);
+    set((s) => ({
+      rideSessions: s.rideSessions.filter((r) => r.id !== id),
+      replayingRideId: s.replayingRideId === id ? null : s.replayingRideId,
+    }));
+    get().pushToast('Registro de pedal removido', undefined, 'slate');
+  },
+
+  async saveRideAsRoute(id) {
+    const ride = get().rideSessions.find((r) => r.id === id);
+    if (!ride) return;
+    const route = rideSessionToSavedRoute(ride);
+    if (!route) {
+      get().pushToast('Trajeto muito curto', 'É preciso ao menos 2 pontos GPS para criar uma rota.', 'amber');
+      return;
+    }
+    await repository.saveRoute(route);
+    set((s) => ({
+      savedRoutes: [route, ...s.savedRoutes.filter((r) => r.id !== route.id)],
+    }));
+    get().pushToast('Salvo em Rotas Salvas!', route.name, 'emerald');
+  },
+
+  setReplayingRideId(id) {
+    set({ replayingRideId: id });
+  },
+
+  resetVehicleCalibration(vehicleId) {
+    const next = { ...get().batteryCalibrations };
+    delete next[vehicleId];
+    set({ batteryCalibrations: next });
+    persistPrefs(get());
+    get().pushToast('Calibração redefinida', 'Autonomia voltou ao padrão de fábrica do veículo.', 'slate');
   },
 
   async locateCurrentPosition({ silent = false, flyToUser = false } = {}) {
@@ -917,7 +1148,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       (origin && destination ? [origin.coords, ...viaPoints, destination.coords] : []);
     if (waypoints.length < 2) return;
 
-    set({ isRouting: true, mode: 'preview' });
+    set({ isRouting: true, mode: 'preview', replayingRideId: null });
+    void get().refreshWeather(waypoints[0]);
     const candidates = await planMultiProfileRoutes(waypoints, origin?.name, destination?.name);
     set((s) => ({
       isRouting: false,
@@ -992,9 +1224,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const cand = savedRouteToCandidate(route);
     const first = cand.waypoints[0];
     const last = cand.waypoints[cand.waypoints.length - 1];
+    void get().refreshWeather(first);
     set((s) => ({
       mode: 'preview',
       isEditingWaypoints: false,
+      replayingRideId: null,
       origin: {
         id: `orig-${route.id}`,
         name: route.originName || 'Ponto de Partida',
@@ -1249,32 +1483,59 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   startNavigation(demo = false) {
-    const cand = get().candidates[get().selectedCandidateIdx];
+    const state = get();
+    const cand = state.candidates[state.selectedCandidateIdx];
     if (!cand) return;
+    const vehicle = selectActiveVehicle(state);
+    const startPt: LngLat = [cand.coords[0][0], cand.coords[0][1]];
+    const rec = createRideRecording({
+      mode: demo ? 'demo' : 'guided',
+      vehicle,
+      vehicleModeIndex: state.selectedModeIndex,
+      title: cand.title,
+      routeId: cand.id,
+      originName: cand.originName,
+      destName: cand.destName,
+      initialPos: demo ? startPt : state.nav.currentPos,
+    });
     set((s) => ({
       mode: 'navigate',
       isEditingWaypoints: false,
       mapPickTarget: null,
+      replayingRideId: null,
+      activeRide: rec,
       nav: {
         ...s.nav,
         isTracking: !demo,
         isDemoMode: demo,
+        isFreeRide: false,
         followUser: true,
         pitch3D: true,
         distanceAlongM: 0,
         offRouteMeters: 0,
-        currentPos: demo ? [cand.coords[0][0], cand.coords[0][1]] : s.nav.currentPos,
+        currentPos: demo ? startPt : s.nav.currentPos,
       },
     }));
   },
 
   stopNavigation() {
+    const state = get();
+    const rec = state.activeRide;
+    let summary: RideSession | null = null;
+    if (rec && (rec.distanceKm >= 0.02 || rec.track.length >= 2)) {
+      const vehicle = selectActiveVehicle(state);
+      summary = finalizeRideRecording(rec, vehicle, state.riderWeightKg, state.weather);
+    }
+    const wasFreeRide = state.nav.isFreeRide;
     set((s) => ({
-      mode: s.candidates.length > 0 ? 'preview' : 'explore',
+      mode: wasFreeRide ? 'explore' : s.candidates.length > 0 ? 'preview' : 'explore',
+      activeRide: null,
+      pendingRideSummary: summary ?? s.pendingRideSummary,
       nav: {
         ...s.nav,
         isTracking: false,
         isDemoMode: false,
+        isFreeRide: false,
         isRerouting: false,
         offRouteMeters: 0,
       },

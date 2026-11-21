@@ -155,6 +155,36 @@ def run_e2e() -> int:
                 else None,
             )
 
+            # Deterministic Open-Meteo weather mock (light rain + 18 km/h wind from North)
+            page.route(
+                "https://api.open-meteo.com/v1/forecast**",
+                lambda route: route.fulfill(
+                    status=200,
+                    headers={"Access-Control-Allow-Origin": "*", "Content-Type": "application/json"},
+                    body=json.dumps(
+                        {
+                            "current": {
+                                "time": "2026-11-21T14:00",
+                                "temperature_2m": 27.0,
+                                "apparent_temperature": 28.0,
+                                "relative_humidity_2m": 62,
+                                "precipitation": 0.6,
+                                "weather_code": 61,
+                                "wind_speed_10m": 18.0,
+                                "wind_direction_10m": 0,
+                                "wind_gusts_10m": 24.0,
+                                "is_day": 1,
+                            },
+                            "hourly": {
+                                "time": ["2026-11-21T14:00"],
+                                "precipitation_probability": [65],
+                                "uv_index": [6.5],
+                            },
+                        }
+                    ),
+                ),
+            )
+
             page.goto(URL_GUEST, wait_until="domcontentloaded")
             page.wait_for_selector("#eixoverde-desktop-menu-btn", timeout=15000)
             time.sleep(1.8)
@@ -281,6 +311,13 @@ def run_e2e() -> int:
             time.sleep(0.5)
             c_text = page.locator("aside").first.inner_text()
             check("Curated Esplanada -> Asa Norte shows 3 travessias & +82m", "3 travessias" in c_text and "+82m" in c_text)
+            check(
+                "Live Open-Meteo weather pill & wet-ciclovia scooter warning render in Route Preview",
+                page.locator("aside #eixoverde-weather-pill").is_visible()
+                and "27°C" in page.locator("aside #eixoverde-weather-pill").inner_text()
+                and page.locator("aside #eixoverde-weather-warning").is_visible()
+                and "ciclovia molhada" in page.locator("aside #eixoverde-weather-warning").inner_text(),
+            )
             page.locator("aside button:has-text('Só Ida')").click()
             time.sleep(0.2)
             rt_text = page.locator("aside").first.inner_text()
@@ -288,10 +325,10 @@ def run_e2e() -> int:
             page.locator("aside button:has-text('Ida + Volta')").click()
             time.sleep(0.2)
 
-            # 1f. Demo Navigation + 2D/3D toggle + Hazard Modal dark contrast
+            # 1f. Demo Navigation + 2D/3D toggle + Hazard Modal dark contrast + RideSummaryModal
             page.locator("aside #eixoverde-demo-nav-btn").click()
             page.wait_for_selector("button:has-text('Sair')", timeout=8000)
-            time.sleep(0.9)
+            time.sleep(1.1)
             page.locator("button:has-text('3D')").click()
             time.sleep(0.3)
             check("Demo Navigation launches & toggles 3D -> 2D", page.locator("button:has-text('2D')").is_visible())
@@ -305,11 +342,61 @@ def run_e2e() -> int:
             page.locator("button:has-text('Publicar Alerta')").click()
             time.sleep(0.3)
             page.locator("button:has-text('Sair')").click()
+            page.wait_for_selector("#eixoverde-ride-summary-modal", timeout=6000)
+            sum_txt = page.locator("#eixoverde-ride-summary-modal").inner_text()
+            ride_title_in = page.locator("#eixoverde-ride-title-input")
+            ride_title_in.click()
+            rt_c = ride_title_in.evaluate("el => ({ color: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor })")
+            check(
+                "Exiting Demo Navigation opens RideSummaryModal with Simulação badge & crisp dark input",
+                "Simulação" in sum_txt and rt_c["bg"] != "rgb(255, 255, 255)",
+                json.dumps(rt_c),
+            )
+            save_shot(page, "e2e_phase3_ride_summary_dark.png")
+            page.click("#eixoverde-ride-save-btn")
             time.sleep(0.4)
 
-            # 1g. Offline routing resilience test
+            # 1f-2. Meus Pedais history tab + SVG Replay Chart + Free Ride HUD (Pause/Resume/Finish)
             page.locator("aside button[aria-label='Voltar']").click()
             time.sleep(0.3)
+            page.click("aside #eixoverde-tab-rides")
+            page.wait_for_selector("aside #eixoverde-rides-panel", timeout=6000)
+            time.sleep(0.3)
+            rides_txt = page.locator("aside #eixoverde-rides-panel").inner_text()
+            check(
+                "Meus Pedais displays lifetime stats & saved Demo ride",
+                "resumo acumulado" in rides_txt.lower() and "Simulação" in rides_txt and "Esplanada" in rides_txt,
+            )
+            page.locator("aside #eixoverde-rides-panel button:has-text('Replay')").first.click()
+            time.sleep(0.4)
+            check(
+                "Ride Replay card opens SVG speed/elevation chart & Salvar como Rota / GPX actions",
+                page.locator("aside #eixoverde-rides-panel svg polyline").count() >= 1
+                and "Salvar como Rota" in page.locator("aside #eixoverde-rides-panel").inner_text(),
+            )
+            save_shot(page, "e2e_phase3_meus_pedais.png")
+
+            # Launch Free Ride ("Pedal Livre") HUD -> Pause -> Resume -> Finish
+            page.click("aside #eixoverde-start-freeride-btn")
+            page.wait_for_selector("#eixoverde-freeride-hud", timeout=6000)
+            time.sleep(0.3)
+            page.click("#eixoverde-freeride-pause-btn")
+            time.sleep(0.2)
+            fr_paused = "Retomar" in page.locator("#eixoverde-freeride-pause-btn").inner_text()
+            page.click("#eixoverde-freeride-finish-btn")
+            time.sleep(0.35)
+            # If RideSummaryModal opened from short free ride, discard cleanly
+            if page.locator("#eixoverde-ride-discard-btn").is_visible():
+                page.click("#eixoverde-ride-discard-btn")
+                time.sleep(0.2)
+            check(
+                "Free Ride ('Pedal Livre') HUD launches, toggles Pause/Retomar & finishes cleanly",
+                fr_paused and page.locator("aside #eixoverde-search-input").is_visible(),
+            )
+
+            # 1g. Offline routing resilience test
+            page.locator("aside button:has-text('Rotas')").first.click()
+            time.sleep(0.2)
 
             def block_routing(route):
                 u = route.request.url
@@ -355,14 +442,19 @@ def run_e2e() -> int:
                 """() => {
                   const brand = document.querySelector('#eixoverde-mobile-menu-btn').getBoundingClientRect();
                   const rBtns = Array.from(document.querySelectorAll('header > div button')).map(b => b.getBoundingClientRect());
+                  const tabs = Array.from(document.querySelectorAll('section #eixoverde-tab-rides')[0].parentElement.querySelectorAll('button')).map(b => b.getBoundingClientRect());
                   return {
                     overlaps: brand.right > rBtns[0].left + 1,
                     clips: rBtns[rBtns.length - 1].right > 376,
+                    tabsClean: Math.max(...tabs.map(t => t.right)) <= 376 && Math.max(...tabs.map(t => t.height)) <= 38,
                     userSelect: getComputedStyle(document.querySelector('#eixoverde-mobile-menu-btn')).userSelect,
                   };
                 }"""
             )
-            check("iPhone SE (375px) header zero overlap/clipping & select-none", not se_hdr["overlaps"] and not se_hdr["clips"] and se_hdr["userSelect"] == "none")
+            check(
+                "iPhone SE (375px) header & 3-tab switch zero overlap/clipping & select-none",
+                not se_hdr["overlaps"] and not se_hdr["clips"] and se_hdr["tabsClean"] and se_hdr["userSelect"] == "none",
+            )
 
             se.locator("section >> text=Esplanada → Asa Norte").first.click()
             se.wait_for_selector("section #eixoverde-start-nav-btn", timeout=8000)
@@ -668,6 +760,53 @@ def run_e2e() -> int:
                     )
                     return
 
+                if "/rest/v1/ride_sessions" in url:
+                    if method == "GET":
+                        route.fulfill(
+                            status=200,
+                            headers=cors,
+                            body=json.dumps(
+                                [
+                                    {
+                                        "user_id": "11111111-2222-3333-4444-555555555555",
+                                        "id": "cloud-ride-df-1",
+                                        "title": "Pedal Cloud Eixo Monumental",
+                                        "mode": "guided",
+                                        "is_demo": False,
+                                        "started_at": "2026-11-21T08:00:00Z",
+                                        "ended_at": "2026-11-21T08:25:00Z",
+                                        "moving_duration_sec": 1320,
+                                        "total_duration_sec": 1500,
+                                        "distance_km": 8.4,
+                                        "avg_speed_kmh": 22.9,
+                                        "max_speed_kmh": 27,
+                                        "ascent_m": 64,
+                                        "descent_m": 58,
+                                        "calories_kcal": 48,
+                                        "co2_saved_kg": 1.47,
+                                        "vehicle_id": "jet-aluguel",
+                                        "vehicle_name": "JET Compartilhado (20 km/h)",
+                                        "vehicle_mode_index": 1,
+                                        "is_electric": True,
+                                        "battery_start_pct": 92,
+                                        "battery_end_pct": 71,
+                                        "battery_used_pct": 21,
+                                        "estimated_battery_used_pct": 20,
+                                        "track": [
+                                            {"lng": -47.8992, "lat": -15.7524, "ele": 1070, "ts": 1700000000000, "speedKmh": 20},
+                                            {"lng": -47.8645, "lat": -15.7983, "ele": 1088, "ts": 1700001500000, "speedKmh": 23},
+                                        ],
+                                        "created_at": "2026-11-21T08:25:00Z",
+                                        "updated_at": "2026-11-21T08:25:00Z",
+                                        "deleted_at": None,
+                                    }
+                                ]
+                            ),
+                        )
+                        return
+                    route.fulfill(status=201, headers=cors, body=json.dumps([]))
+                    return
+
                 if "/rest/v1/user_preferences" in url:
                     route.fulfill(status=200, headers=cors, body="null")
                     return
@@ -745,6 +884,15 @@ def run_e2e() -> int:
                 len(pushed_places) >= 1 and "Rota Cloud Sincronizada" in sidebar_after_sync,
                 f"pushed_places={len(pushed_places)}",
             )
+            cpage.click("aside #eixoverde-tab-rides")
+            cpage.wait_for_selector("aside #eixoverde-rides-panel", timeout=6000)
+            time.sleep(0.25)
+            check(
+                "Bidirectional cloud sync pulls ride_sessions into Meus Pedais",
+                "Pedal Cloud Eixo Monumental" in cpage.locator("aside #eixoverde-rides-panel").inner_text(),
+            )
+            cpage.locator("aside button:has-text('Rotas')").first.click()
+            time.sleep(0.2)
             check(
                 "0px-width sync indicator dot appears on brand menu button after login",
                 cpage.locator("#eixoverde-shell-sync-dot").is_visible(),

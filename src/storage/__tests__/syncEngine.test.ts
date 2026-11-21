@@ -1,10 +1,10 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CURATED_DF_ROUTES } from '../../data/curatedRoutes';
-import type { SavedPlace, SavedRoute } from '../../types';
+import type { RideSession, SavedPlace, SavedRoute } from '../../types';
 import { indexedDbStorage } from '../indexedDbAdapter';
 import { repository } from '../repository';
-import { CloudSyncError, supabaseAdapter } from '../supabaseAdapter';
+import { CloudSyncError, isMissingTableError, supabaseAdapter } from '../supabaseAdapter';
 import { computeBackoffDelayMs, isUntouchedCuratedRoute, syncEngine } from '../syncEngine';
 
 const sampleRoute: SavedRoute = {
@@ -32,7 +32,39 @@ const sampleRoute: SavedRoute = {
   safetyScore: 92,
 };
 
-describe('syncEngine.ts & IndexedDB v3 Offline-First Sync', () => {
+const sampleRide: RideSession = {
+  id: 'ride-test-1',
+  title: 'Pedal Asa Norte → Esplanada',
+  mode: 'guided',
+  isDemo: false,
+  startedAt: '2026-11-21T10:00:00.000Z',
+  endedAt: '2026-11-21T10:26:00.000Z',
+  movingDurationSec: 1380,
+  totalDurationSec: 1560,
+  distanceKm: 7.9,
+  avgSpeedKmh: 20.6,
+  maxSpeedKmh: 25,
+  ascentM: 82,
+  descentM: 71,
+  caloriesKcal: 42,
+  co2SavedKg: 1.38,
+  vehicleId: 'jet-aluguel',
+  vehicleName: 'JET Compartilhado (20 km/h)',
+  vehicleModeIndex: 1,
+  isElectric: true,
+  batteryStartPct: 95,
+  batteryEndPct: 72,
+  batteryUsedPct: 23,
+  estimatedBatteryUsedPct: 21,
+  track: [
+    { lng: -47.8992, lat: -15.7524, ele: 1070, ts: 1700000000000, speedKmh: 18 },
+    { lng: -47.8645, lat: -15.7983, ele: 1088, ts: 1700001560000, speedKmh: 21 },
+  ],
+  createdAt: '2026-11-21T10:26:00.000Z',
+  updatedAt: '2026-11-21T10:26:00.000Z',
+};
+
+describe('syncEngine.ts & IndexedDB v4 Offline-First Sync', () => {
   beforeEach(async () => {
     vi.unstubAllEnvs();
     await syncEngine.resetForTests();
@@ -130,6 +162,7 @@ describe('syncEngine.ts & IndexedDB v3 Offline-First Sync', () => {
     vi.spyOn(supabaseAdapter, 'upsertSavedPlace').mockResolvedValue();
     vi.spyOn(supabaseAdapter, 'upsertCustomVehicle').mockResolvedValue();
     vi.spyOn(supabaseAdapter, 'upsertHazard').mockResolvedValue();
+    vi.spyOn(supabaseAdapter, 'upsertRideSession').mockResolvedValue();
     vi.spyOn(supabaseAdapter, 'upsertPreferences').mockResolvedValue();
 
     vi.spyOn(supabaseAdapter, 'pullSavedRoutes').mockResolvedValue({
@@ -142,6 +175,7 @@ describe('syncEngine.ts & IndexedDB v3 Offline-First Sync', () => {
     });
     vi.spyOn(supabaseAdapter, 'pullCustomVehicles').mockResolvedValue({ active: [], deletedIds: [] });
     vi.spyOn(supabaseAdapter, 'pullHazards').mockResolvedValue({ active: [], deletedIds: [] });
+    vi.spyOn(supabaseAdapter, 'pullRideSessions').mockResolvedValue({ active: [], deletedIds: [] });
     vi.spyOn(supabaseAdapter, 'pullPreferences').mockResolvedValue(null);
 
     const ok = await syncEngine.syncNow({ force: true });
@@ -176,6 +210,7 @@ describe('syncEngine.ts & IndexedDB v3 Offline-First Sync', () => {
     vi.spyOn(supabaseAdapter, 'pullSavedPlaces').mockResolvedValue({ active: [], deletedIds: [] });
     vi.spyOn(supabaseAdapter, 'pullCustomVehicles').mockResolvedValue({ active: [], deletedIds: [] });
     vi.spyOn(supabaseAdapter, 'pullHazards').mockResolvedValue({ active: [], deletedIds: [] });
+    vi.spyOn(supabaseAdapter, 'pullRideSessions').mockResolvedValue({ active: [], deletedIds: [] });
     vi.spyOn(supabaseAdapter, 'pullPreferences').mockResolvedValue(null);
 
     await syncEngine.syncNow({ force: true });
@@ -204,5 +239,36 @@ describe('syncEngine.ts & IndexedDB v3 Offline-First Sync', () => {
     expect(routes).toHaveLength(1);
     expect(computeBackoffDelayMs(3)).toBe(8000);
     expect(computeBackoffDelayMs(20)).toBe(60000);
+  });
+
+  it('syncs ride_sessions bidirectionally and degrades gracefully if ride_sessions SQL migration is missing', async () => {
+    expect(isMissingTableError({ code: 'PGRST205', message: "Could not find the table 'public.ride_sessions' in the schema cache" })).toBe(true);
+    expect(isMissingTableError({ code: '42P01', message: 'relation "public.ride_sessions" does not exist' })).toBe(true);
+    expect(isMissingTableError({ code: 'PGRST301', status: 401, message: 'JWT expired' })).toBe(false);
+
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://tuocwnjnkihchlxxqmgi.supabase.co');
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'sb_publishable_Biywe21SerSFL7yZYtl4nw_8X-dxTest');
+    vi.spyOn(syncEngine, 'scheduleFlush').mockImplementation(() => {});
+    await syncEngine.initialize('user-df-1');
+
+    await repository.saveRideSession(sampleRide);
+    const upsertRideSpy = vi.spyOn(supabaseAdapter, 'upsertRideSession').mockResolvedValue();
+    vi.spyOn(supabaseAdapter, 'pullSavedRoutes').mockResolvedValue({ active: [], deletedIds: [] });
+    vi.spyOn(supabaseAdapter, 'pullSavedPlaces').mockResolvedValue({ active: [], deletedIds: [] });
+    vi.spyOn(supabaseAdapter, 'pullCustomVehicles').mockResolvedValue({ active: [], deletedIds: [] });
+    vi.spyOn(supabaseAdapter, 'pullHazards').mockResolvedValue({ active: [], deletedIds: [] });
+    vi.spyOn(supabaseAdapter, 'pullRideSessions').mockResolvedValue({
+      active: [{ ...sampleRide, id: 'ride-cloud-2', title: 'Pedal Nuvem Lago Sul' }],
+      deletedIds: [],
+    });
+    vi.spyOn(supabaseAdapter, 'pullPreferences').mockResolvedValue(null);
+
+    const ok = await syncEngine.syncNow({ force: true });
+    expect(ok).toBe(true);
+    expect(upsertRideSpy).toHaveBeenCalledTimes(1);
+
+    const rides = await repository.getRideSessions();
+    expect(rides.map((r) => r.id)).toContain('ride-test-1');
+    expect(rides.map((r) => r.id)).toContain('ride-cloud-2');
   });
 });

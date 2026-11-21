@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Activity,
   Briefcase,
   Check,
   Compass,
@@ -9,6 +10,7 @@ import {
   MapPin,
   Navigation2,
   Pencil,
+  Play,
   Plus,
   Search,
   ShieldCheck,
@@ -22,6 +24,7 @@ import { searchPlaces } from '../../engine/routing';
 import { computeRouteTelemetry } from '../../engine/telemetry';
 import { selectActiveVehicle, useAppStore } from '../../store/useAppStore';
 import type { PlaceResult, SavedPlace, SavedPlaceCategory, SavedRoute } from '../../types';
+import { RidesHistoryPanel } from '../rides/RidesHistoryPanel';
 
 export function ExplorePanel() {
   const [query, setQuery] = useState('');
@@ -44,6 +47,8 @@ export function ExplorePanel() {
   const setExploreTab = useAppStore((s) => s.setExploreTab);
   const savedRoutes = useAppStore((s) => s.savedRoutes);
   const savedPlaces = useAppStore((s) => s.savedPlaces);
+  const rideSessions = useAppStore((s) => s.rideSessions);
+  const startFreeRide = useAppStore((s) => s.startFreeRide);
   const loadSavedRoute = useAppStore((s) => s.loadSavedRoute);
   const toggleFavoriteRoute = useAppStore((s) => s.toggleFavoriteRoute);
   const renameSavedRoute = useAppStore((s) => s.renameSavedRoute);
@@ -420,6 +425,15 @@ export function ExplorePanel() {
           </button>
         )}
         <button
+          id="eixoverde-freeride-chip"
+          type="button"
+          onClick={startFreeRide}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-600/30 bg-emerald-600/10 px-3 py-1.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300"
+        >
+          <Play className="h-3 w-3 fill-current" />
+          Pedal Livre
+        </button>
+        <button
           type="button"
           onClick={() => setMapPickTarget(mapPickTarget === 'dest' ? null : 'dest')}
           className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -445,36 +459,51 @@ export function ExplorePanel() {
         </button>
       </div>
 
-      {/* Primary Segmented Switch: Rotas | Meus Locais */}
-      <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/90">
+      {/* Primary Segmented Switch: Rotas | Meus Locais | Pedais */}
+      <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/90">
         <button
           type="button"
           onClick={() => setExploreTab('routes')}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold ${
+          className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-1.5 text-[11px] font-bold ${
             exploreTab === 'routes'
               ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
               : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
           }`}
         >
-          <Compass className="h-3.5 w-3.5" />
+          <Compass className="h-3.5 w-3.5 shrink-0" />
           Rotas
         </button>
         <button
           type="button"
           onClick={() => setExploreTab('places')}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold ${
+          className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-1.5 text-[11px] font-bold ${
             exploreTab === 'places'
               ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
               : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
           }`}
         >
-          <Star className="h-3.5 w-3.5" />
+          <Star className="h-3.5 w-3.5 shrink-0" />
           Meus Locais ({savedPlaces.length})
+        </button>
+        <button
+          id="eixoverde-tab-rides"
+          type="button"
+          onClick={() => setExploreTab('rides')}
+          className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-1.5 text-[11px] font-bold ${
+            exploreTab === 'rides'
+              ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+          }`}
+        >
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          Pedais ({rideSessions.length})
         </button>
       </div>
 
       {/* TAB 1: ROTAS (Saved Routes first, then Brasília Routes below) */}
-      {exploreTab === 'routes' ? (
+      {exploreTab === 'rides' ? (
+        <RidesHistoryPanel />
+      ) : exploreTab === 'routes' ? (
         <div className="space-y-4">
           {/* Minhas Rotas Salvas (Top) */}
           <div className="space-y-2">

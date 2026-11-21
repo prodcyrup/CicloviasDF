@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   Bike,
   Bookmark,
@@ -41,6 +42,7 @@ export function AppMenuDrawer() {
   const activeVehicle = useAppStore(selectActiveVehicle);
   const savedRoutes = useAppStore((s) => s.savedRoutes);
   const savedPlaces = useAppStore((s) => s.savedPlaces);
+  const rideSessions = useAppStore((s) => s.rideSessions);
   const hazards = useAppStore((s) => s.hazards);
   const currentLocationPlace = useAppStore((s) => s.currentLocationPlace);
 
@@ -295,6 +297,22 @@ export function AppMenuDrawer() {
               type="button"
               onClick={() => {
                 setMenuOpen(false);
+                clearActiveRoute();
+                setExploreTab('rides');
+              }}
+              className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Activity className="h-4.5 w-4.5 text-emerald-500" />
+              <span className="flex-1 text-sm font-semibold">Meus Pedais</span>
+              <span className="font-mono-num rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {rideSessions.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
                 setCompareOpen(true);
               }}
               className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -397,6 +415,10 @@ export function AppMenuDrawer() {
               <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                 {supabaseEnabled ? 'ORS Edge Proxy' : hasOrsKey() ? 'OpenRouteService' : 'BRouter / OSRM'}
               </span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+              <span>Clima &amp; Vento</span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">Open-Meteo Live</span>
             </div>
             <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span>Sincronização</span>

@@ -176,6 +176,10 @@ export interface RouteTelemetry {
   caloriesKcal: number;
   co2SavedKg: number;
   comfortWarning: string | null;
+  windEffectLabel?: string | null;
+  weatherWarning?: string | null;
+  calibrationApplied?: boolean;
+  calibrationMultiplier?: number;
 }
 
 export type SavedPlaceCategory = 'home' | 'work' | 'favorite';
@@ -186,6 +190,83 @@ export interface SavedPlace {
   address: string;
   coords: LngLat;
   category: SavedPlaceCategory;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// === Phase 3: Live Weather, Battery Calibration & Ride History Types ===
+
+export type WeatherIconKind = 'sun' | 'partly_cloudy' | 'cloudy' | 'rain' | 'storm' | 'fog';
+
+export interface WeatherSnapshot {
+  fetchedAt: string;
+  coords: LngLat;
+  temperatureC: number;
+  apparentTempC: number;
+  humidityPct: number;
+  precipitationMm: number;
+  rainProbabilityPct: number;
+  windSpeedKmh: number;
+  windGustsKmh: number;
+  windDirectionDeg: number; // Meteorological "blowing FROM" degrees (0=N, 90=E, 180=S, 270=W)
+  uvIndex: number;
+  weatherCode: number;
+  label: string;
+  icon: WeatherIconKind;
+  isDay: boolean;
+}
+
+export interface VehicleBatteryCalibration {
+  vehicleId: string;
+  efficiencyMultiplier: number; // clamped [0.55, 1.45]; 1.0 = nominal model
+  sampleCount: number;
+  lastCalibratedAt: string;
+}
+
+export interface RideTrackPoint {
+  lng: number;
+  lat: number;
+  ele?: number;
+  ts: number; // epoch ms
+  speedKmh: number;
+}
+
+export type RideMode = 'guided' | 'free_ride' | 'demo';
+
+export interface RideSession {
+  id: string;
+  title: string;
+  mode: RideMode;
+  isDemo: boolean;
+  startedAt: string;
+  endedAt: string;
+  movingDurationSec: number;
+  totalDurationSec: number;
+  distanceKm: number;
+  avgSpeedKmh: number;
+  maxSpeedKmh: number;
+  ascentM: number;
+  descentM: number;
+  caloriesKcal: number;
+  co2SavedKg: number;
+  vehicleId: string;
+  vehicleName: string;
+  vehicleModeIndex: number;
+  isElectric: boolean;
+  batteryStartPct?: number;
+  batteryEndPct?: number;
+  batteryUsedPct?: number;
+  estimatedBatteryUsedPct?: number;
+  weatherSummary?: {
+    temperatureC: number;
+    windSpeedKmh: number;
+    rainProbabilityPct: number;
+    label: string;
+  };
+  routeId?: string;
+  originName?: string;
+  destName?: string;
+  track: RideTrackPoint[];
   createdAt: string;
   updatedAt: string;
 }
@@ -202,6 +283,7 @@ export interface UserPreferences {
   showHazards: boolean;
   homePlace?: PlaceResult;
   workPlace?: PlaceResult;
+  batteryCalibrations?: Record<string, VehicleBatteryCalibration>;
   updatedAt?: string;
 }
 
@@ -221,6 +303,7 @@ export type SyncEntityType =
   | 'saved_places'
   | 'custom_vehicles'
   | 'hazard_reports'
+  | 'ride_sessions'
   | 'user_preferences';
 
 export interface SyncOutboxItem {
@@ -247,6 +330,7 @@ export interface LocalMigrationSummary {
   places: number;
   vehicles: number;
   hazards: number;
+  rides: number;
   total: number;
 }
 

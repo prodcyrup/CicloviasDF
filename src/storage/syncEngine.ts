@@ -3,6 +3,7 @@ import { CURATED_DF_ROUTES } from '../data/curatedRoutes';
 import type {
   HazardReport,
   LocalMigrationSummary,
+  RideSession,
   SavedPlace,
   SavedRoute,
   SyncEntityType,
@@ -254,11 +255,12 @@ class SyncEngine {
   }
 
   async getLocalMigrationSummary(): Promise<LocalMigrationSummary> {
-    const [routes, places, vehicles, hazards] = await Promise.all([
+    const [routes, places, vehicles, hazards, rides] = await Promise.all([
       indexedDbStorage.getSavedRoutes(),
       indexedDbStorage.getSavedPlaces(),
       indexedDbStorage.getCustomVehicles(),
       indexedDbStorage.getHazards(),
+      indexedDbStorage.getRideSessions(),
     ]);
 
     const userRoutes = routes.filter((r) => !isUntouchedCuratedRoute(r));
@@ -269,7 +271,8 @@ class SyncEngine {
       places: places.length,
       vehicles: vehicles.length,
       hazards: localHazards.length,
-      total: userRoutes.length + places.length + vehicles.length + localHazards.length,
+      rides: rides.length,
+      total: userRoutes.length + places.length + vehicles.length + localHazards.length + rides.length,
     };
     return summary;
   }
@@ -291,11 +294,12 @@ class SyncEngine {
     if (!hasSupabaseConfig() || !this.currentUserId) return false;
     const userId = this.currentUserId;
 
-    const [routes, places, vehicles, hazards, prefs] = await Promise.all([
+    const [routes, places, vehicles, hazards, rides, prefs] = await Promise.all([
       indexedDbStorage.getSavedRoutes(),
       indexedDbStorage.getSavedPlaces(),
       indexedDbStorage.getCustomVehicles(),
       indexedDbStorage.getHazards(),
+      indexedDbStorage.getRideSessions(),
       indexedDbStorage.getPreferences(),
     ]);
 
@@ -349,6 +353,18 @@ class SyncEngine {
         operation: 'upsert',
         payload: enriched,
         updatedAt: hazard.updatedAt || hazard.createdAt || now,
+        attempts: 0,
+      });
+    }
+
+    for (const ride of rides) {
+      await indexedDbStorage.putOutboxItem({
+        id: `ride_sessions:${ride.id}`,
+        entity: 'ride_sessions',
+        recordId: ride.id,
+        operation: 'upsert',
+        payload: ride,
+        updatedAt: ride.updatedAt || ride.endedAt || now,
         attempts: 0,
       });
     }
@@ -544,6 +560,14 @@ class SyncEngine {
         }
         break;
       }
+      case 'ride_sessions': {
+        if (item.operation === 'delete') {
+          await supabaseAdapter.softDeleteRideSession(userId, item.recordId, item.updatedAt);
+        } else if (item.payload) {
+          await supabaseAdapter.upsertRideSession(userId, item.payload as RideSession);
+        }
+        break;
+      }
       case 'user_preferences': {
         if (item.operation === 'upsert' && item.payload) {
           await supabaseAdapter.upsertPreferences(userId, item.payload as UserPreferences);
@@ -559,11 +583,13 @@ class SyncEngine {
       cloudPlaces,
       cloudVehicles,
       cloudHazards,
+      cloudRides,
       cloudPrefs,
       localRoutes,
       localPlaces,
       localVehicles,
       localHazards,
+      localRides,
       localPrefs,
       tombstones,
       outbox,
@@ -572,11 +598,16 @@ class SyncEngine {
       supabaseAdapter.pullSavedPlaces(userId),
       supabaseAdapter.pullCustomVehicles(userId),
       supabaseAdapter.pullHazards(),
+      supabaseAdapter.pullRideSessions(userId).catch((err) => {
+        if (isAuthError(err)) throw err;
+        return { active: [] as RideSession[], deletedIds: [] as Array<{ id: string; deletedAt: string }> };
+      }),
       supabaseAdapter.pullPreferences(userId),
       indexedDbStorage.getSavedRoutes(),
       indexedDbStorage.getSavedPlaces(),
       indexedDbStorage.getCustomVehicles(),
       indexedDbStorage.getHazards(),
+      indexedDbStorage.getRideSessions(),
       indexedDbStorage.getPreferences(),
       indexedDbStorage.getTombstones(),
       indexedDbStorage.getOutboxItems(),
@@ -731,14 +762,48 @@ class SyncEngine {
       }
     }
 
-    // --- Merge User Preferences (LWW) ---
+    // --- Merge Ride Sessions (LWW) ---
+    const localRideMap = new Map(localRides.map((r) => [r.id, r]));
+    for (const del of cloudRides.deletedIds) {
+      const key = `ride_sessions:${del.id}`;
+      const local = localRideMap.get(del.id);
+      if (!local || (del.deletedAt || '') >= (local.updatedAt || '')) {
+        await indexedDbStorage.deleteRideSession(del.id);
+        await indexedDbStorage.putTombstone({
+          key,
+          entity: 'ride_sessions',
+          recordId: del.id,
+          deletedAt: del.deletedAt,
+        });
+      }
+    }
+    for (const remote of cloudRides.active) {
+      const key = `ride_sessions:${remote.id}`;
+      const tombAt = tombstoneMap.get(key);
+      if (tombAt && tombAt >= (remote.updatedAt || '')) continue;
+
+      const pending = outboxMap.get(key);
+      if (pending && pending.updatedAt > (remote.updatedAt || '')) continue;
+
+      const local = localRideMap.get(remote.id);
+      if (!local || (remote.updatedAt || '') > (local.updatedAt || '')) {
+        await indexedDbStorage.saveRideSession(remote);
+      }
+    }
+
+    // --- Merge User Preferences (LWW, preserving per-vehicle battery calibrations) ---
     if (cloudPrefs && cloudPrefs.prefs && Object.keys(cloudPrefs.prefs).length > 0) {
       const localUpdated = localPrefs.updatedAt || '';
       const pendingPref = outboxMap.get('user_preferences:current');
       if (!pendingPref && cloudPrefs.updatedAt > localUpdated) {
+        const mergedCalibrations = {
+          ...(localPrefs.batteryCalibrations ?? {}),
+          ...(cloudPrefs.prefs.batteryCalibrations ?? {}),
+        };
         const mergedPrefs = {
           ...localPrefs,
           ...cloudPrefs.prefs,
+          batteryCalibrations: Object.keys(mergedCalibrations).length > 0 ? mergedCalibrations : undefined,
           updatedAt: cloudPrefs.updatedAt,
         } as UserPreferences;
         await indexedDbStorage.savePreferences(mergedPrefs);
