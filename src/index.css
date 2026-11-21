@@ -1,0 +1,126 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --surface-glass: rgba(255, 255, 255, 0.92);
+    --surface-card: #ffffff;
+    --surface-muted: #f1f5f9;
+    --border-subtle: rgba(15, 23, 42, 0.09);
+    --ink-primary: #0f172a;
+    --ink-secondary: #475569;
+    --accent-emerald: #059669;
+  }
+
+  .dark {
+    --surface-glass: rgba(15, 23, 32, 0.9);
+    --surface-card: #121a24;
+    --surface-muted: #1a2533;
+    --border-subtle: rgba(255, 255, 255, 0.09);
+    --ink-primary: #f8fafc;
+    --ink-secondary: #94a3b8;
+    --accent-emerald: #10b981;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    background-color: #0b1116;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-panel {
+  background: var(--surface-glass);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Custom MapLibre polish */
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-left {
+  pointer-events: none;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px !important;
+  opacity: 0.65;
+  pointer-events: auto;
+  border-radius: 999px !important;
+  padding: 2px 8px !important;
+  margin: 6px !important;
+}
+
+.dark .maplibregl-ctrl-attrib {
+  background: rgba(15, 23, 32, 0.72) !important;
+  color: #cbd5e1 !important;
+}
+
+.dark .maplibregl-ctrl-attrib a {
+  color: #94a3b8 !important;
+}
+
+/* Custom sleek scrollbars */
+.ev-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ev-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ev-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.28);
+  border-radius: 999px;
+}
+
+.ev-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+/* Safe area padding for notched phones */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 12px);
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+}
+
+/* GPS pulse ring */
+@keyframes gpsPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.gps-pulse-ring {
+  animation: gpsPulse 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
