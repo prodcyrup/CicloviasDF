@@ -11,8 +11,9 @@ import {
   Flag,
   Loader2,
   LocateFixed,
+  Maximize2,
+  Minimize2,
   Moon,
-  Repeat,
   RotateCcw,
   Sun,
   Volume1,
@@ -26,6 +27,7 @@ import {
   formatDistancePtBR,
   formatDurationPtBR,
   interpolateAlongRoute,
+  normalizeAngleDiff,
   projectPointOntoRoute,
 } from '../../engine/geo';
 import {
@@ -36,6 +38,7 @@ import {
   releaseScreenWakeLock,
 } from '../../engine/navigation';
 import { computeRouteTelemetry } from '../../engine/telemetry';
+import { useFullscreen } from '../../hooks/useFullscreen';
 import { useAppStore } from '../../store/useAppStore';
 import type { ManeuverStep } from '../../types';
 
@@ -60,6 +63,8 @@ function ManeuverIcon({ type }: { type: ManeuverStep['type'] }) {
 }
 
 export function LiveNavigationOverlay() {
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
+
   const candidates = useAppStore((s) => s.candidates);
   const selectedCandidateIdx = useAppStore((s) => s.selectedCandidateIdx);
   const nav = useAppStore((s) => s.nav);
@@ -73,7 +78,6 @@ export function LiveNavigationOverlay() {
   const updateNavTelemetry = useAppStore((s) => s.updateNavTelemetry);
   const cycleVoiceMode = useAppStore((s) => s.cycleVoiceMode);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
-  const reverseActiveRoute = useAppStore((s) => s.reverseActiveRoute);
   const openHazardReporter = useAppStore((s) => s.openHazardReporter);
   const triggerOffRouteReroute = useAppStore((s) => s.triggerOffRouteReroute);
   const pushToast = useAppStore((s) => s.pushToast);
@@ -91,6 +95,7 @@ export function LiveNavigationOverlay() {
   const lastSpokenKeyRef = useRef('');
   const lastCrossingSpokenRef = useRef('');
   const lastRerouteTsRef = useRef(0);
+  const lastCompassTsRef = useRef(0);
   const demoDistRef = useRef(0);
 
   // Acquire Wake Lock while navigating
@@ -110,7 +115,7 @@ export function LiveNavigationOverlay() {
     );
   }, [activeRoute?.id]);
 
-  // Live GPS Watch + Phone Compass
+  // Live GPS Watch + Phone Compass (throttled so 60Hz sensor events never jam mobile 2D/3D camera)
   useEffect(() => {
     if (!nav.isTracking || nav.isDemoMode || !activeRoute) return;
 
@@ -154,6 +159,11 @@ export function LiveNavigationOverlay() {
     }
 
     const onOrientation = (ev: DeviceOrientationEvent) => {
+      const now = Date.now();
+      if (now - lastCompassTsRef.current < 220) return;
+      const stNav = useAppStore.getState().nav;
+      if (stNav.currentSpeedKmh >= 4) return;
+
       const webkitHeading = (ev as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
       let trueHeading: number | null = null;
       if (typeof webkitHeading === 'number' && Number.isFinite(webkitHeading)) {
@@ -161,7 +171,11 @@ export function LiveNavigationOverlay() {
       } else if (typeof ev.alpha === 'number' && Number.isFinite(ev.alpha)) {
         trueHeading = (360 - ev.alpha + BRAND.magneticDeclinationDeg + 360) % 360;
       }
-      if (trueHeading !== null && useAppStore.getState().nav.currentSpeedKmh < 4) {
+      if (
+        trueHeading !== null &&
+        Math.abs(normalizeAngleDiff(trueHeading - stNav.currentHeading)) >= 3
+      ) {
+        lastCompassTsRef.current = now;
         updateNavTelemetry({ currentHeading: trueHeading });
       }
     };
@@ -367,11 +381,11 @@ export function LiveNavigationOverlay() {
 
         <button
           type="button"
-          onClick={reverseActiveRoute}
-          title="Inverter sentido (Ida / Volta)"
+          onClick={() => void toggleFullscreen()}
+          title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
           className="glass-panel flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 shadow-lg dark:text-slate-100"
         >
-          <Repeat className="h-5 w-5" />
+          {isFullscreen ? <Minimize2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <Maximize2 className="h-5 w-5" />}
         </button>
 
         <button

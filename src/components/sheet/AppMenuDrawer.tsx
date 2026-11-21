@@ -185,7 +185,7 @@ export function AppMenuDrawer() {
               >
                 <span className="inline-flex items-center gap-2.5">
                   {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
-                  Tema {theme === 'dark' ? 'Escuro (Waze)' : 'Claro (Komoot)'}
+                  Tema {theme === 'dark' ? 'Escuro' : 'Claro'}
                 </span>
                 <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Alternar</span>
               </button>

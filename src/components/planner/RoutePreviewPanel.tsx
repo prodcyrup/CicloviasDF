@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -10,24 +10,32 @@ import {
   Flame,
   Leaf,
   Loader2,
+  LocateFixed,
   MapPin,
   Navigation,
   Play,
   Plus,
   Repeat,
+  Search,
   Share2,
   ShieldCheck,
   X,
 } from 'lucide-react';
+import { BRAND } from '../../config/brand';
 import { formatDurationPtBR } from '../../engine/geo';
 import { downloadTextFile, encodeShareableRouteUrl, exportRouteToGpx } from '../../engine/gpx';
+import { searchPlaces } from '../../engine/routing';
 import { computeRouteTelemetry } from '../../engine/telemetry';
 import { useAppStore } from '../../store/useAppStore';
+import type { PlaceResult } from '../../types';
 import { ElevationProfile } from './ElevationProfile';
 
 export function RoutePreviewPanel() {
   const [savingName, setSavingName] = useState(false);
   const [routeNameInput, setRouteNameInput] = useState('');
+  const [editingEndpoint, setEditingEndpoint] = useState<null | 'origin' | 'dest'>(null);
+  const [endpointQuery, setEndpointQuery] = useState('');
+  const [endpointResults, setEndpointResults] = useState<PlaceResult[]>([]);
 
   const origin = useAppStore((s) => s.origin);
   const destination = useAppStore((s) => s.destination);
@@ -40,6 +48,9 @@ export function RoutePreviewPanel() {
   const toggleEditWaypoints = useAppStore((s) => s.toggleEditWaypoints);
   const removeViaPoint = useAppStore((s) => s.removeViaPoint);
   const swapOriginDest = useAppStore((s) => s.swapOriginDest);
+  const setOrigin = useAppStore((s) => s.setOrigin);
+  const setDestination = useAppStore((s) => s.setDestination);
+  const useCurrentLocationAsOrigin = useAppStore((s) => s.useCurrentLocationAsOrigin);
   const setMapPickTarget = useAppStore((s) => s.setMapPickTarget);
   const clearActiveRoute = useAppStore((s) => s.clearActiveRoute);
   const startNavigation = useAppStore((s) => s.startNavigation);
@@ -51,17 +62,38 @@ export function RoutePreviewPanel() {
   const setModeIndex = useAppStore((s) => s.setModeIndex);
   const riderWeightKg = useAppStore((s) => s.riderWeightKg);
   const setGarageOpen = useAppStore((s) => s.setGarageOpen);
+  const navPos = useAppStore((s) => s.nav.currentPos);
   const pushToast = useAppStore((s) => s.pushToast);
 
   const activeVehicle = getActiveVehicle();
   const activeRoute = candidates[selectedCandidateIdx];
+
+  useEffect(() => {
+    if (!editingEndpoint) return;
+    const timer = setTimeout(async () => {
+      const list = await searchPlaces(endpointQuery, navPos ?? BRAND.defaultCenter);
+      setEndpointResults(list);
+    }, endpointQuery ? 240 : 0);
+    return () => clearTimeout(timer);
+  }, [editingEndpoint, endpointQuery, navPos]);
+
+  const handleSelectEndpointPlace = (place: PlaceResult) => {
+    const slot = editingEndpoint;
+    setEditingEndpoint(null);
+    setEndpointQuery('');
+    if (slot === 'origin') {
+      setOrigin(place, true);
+    } else if (slot === 'dest') {
+      void setDestination(place, true);
+    }
+  };
 
   const handleExportGpx = () => {
     if (!activeRoute) return;
     const gpx = exportRouteToGpx(activeRoute.title, activeRoute.coords, activeRoute.subtitle);
     const slug = activeRoute.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
     downloadTextFile(`eixoverde-${slug || 'rota'}.gpx`, gpx);
-    pushToast('GPX exportado', 'Compatível com Komoot, Strava e ciclocomputadores.', 'emerald');
+    pushToast('GPX exportado', 'Arquivo GPX 1.1 pronto para ciclocomputadores e apps de ciclismo.', 'emerald');
   };
 
   const handleShareLink = async () => {
@@ -72,7 +104,7 @@ export function RoutePreviewPanel() {
         await navigator.share({ title: `EixoVerde • ${activeRoute.title}`, url });
       } else {
         await navigator.clipboard.writeText(url);
-        pushToast('Link copiado!', 'Envie pelo WhatsApp para abrir esta rota no EixoVerde.', 'emerald');
+        pushToast('Link copiado!', 'Envie para abrir esta rota diretamente no EixoVerde.', 'emerald');
       }
     } catch {
       pushToast('Link pronto', url, 'slate');
@@ -87,7 +119,7 @@ export function RoutePreviewPanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Top Origin / Destination Compact Header */}
+      {/* Top Origin (A) / Destination (B) Compact Header */}
       <div className="flex items-start gap-2">
         <button
           type="button"
@@ -99,23 +131,53 @@ export function RoutePreviewPanel() {
         </button>
 
         <div className="min-w-0 flex-1 space-y-1.5">
-          <button
-            type="button"
-            onClick={() => setMapPickTarget('origin')}
-            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-left text-xs hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800/90"
-          >
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-extrabold text-white">
-              A
-            </span>
-            <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
-              {origin?.name || 'Ponto de partida'}
-            </span>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingEndpoint(editingEndpoint === 'origin' ? null : 'origin');
+                setEndpointQuery('');
+              }}
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-xs transition-colors ${
+                editingEndpoint === 'origin'
+                  ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/30'
+                  : 'border-slate-200 bg-white hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800/90'
+              }`}
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-extrabold text-white">
+                A
+              </span>
+              <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                {origin?.name || 'Minha localização atual'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void useCurrentLocationAsOrigin()}
+              title="Definir Ponto A como minha localização atual (GPS)"
+              aria-label="Usar minha localização atual como Ponto A"
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                origin?.source === 'gps'
+                  ? 'border-emerald-600 bg-emerald-600 text-white'
+                  : 'border-slate-200 bg-white text-emerald-600 hover:border-emerald-500/50 dark:border-slate-700 dark:bg-slate-800 dark:text-emerald-400'
+              }`}
+            >
+              <LocateFixed className="h-3.5 w-3.5" />
+            </button>
+          </div>
 
           <button
             type="button"
-            onClick={() => setMapPickTarget('dest')}
-            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-left text-xs hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800/90"
+            onClick={() => {
+              setEditingEndpoint(editingEndpoint === 'dest' ? null : 'dest');
+              setEndpointQuery('');
+            }}
+            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-xs transition-colors ${
+              editingEndpoint === 'dest'
+                ? 'border-sky-500 bg-sky-50/70 dark:bg-sky-950/30'
+                : 'border-slate-200 bg-white hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800/90'
+            }`}
           >
             <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[9px] font-extrabold text-white dark:bg-sky-500">
               B
@@ -129,12 +191,89 @@ export function RoutePreviewPanel() {
         <button
           type="button"
           onClick={swapOriginDest}
-          title="Inverter origem e destino"
+          title="Trocar Ponto A e Ponto B"
           className="mt-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-emerald-500/40 hover:text-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           <ArrowUpDown className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Inline Origin / Destination Picker Dropdown */}
+      {editingEndpoint && (
+        <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-800">
+            <Search className="h-3.5 w-3.5 text-emerald-600" />
+            <input
+              type="text"
+              autoFocus
+              value={endpointQuery}
+              onChange={(e) => setEndpointQuery(e.target.value)}
+              placeholder={
+                editingEndpoint === 'origin'
+                  ? 'Buscar ponto de partida (Ponto A)...'
+                  : 'Buscar destino (Ponto B)...'
+              }
+              className="w-full bg-transparent text-xs font-medium text-slate-900 focus:outline-none dark:text-white"
+            />
+            <button
+              type="button"
+              onClick={() => setEditingEndpoint(null)}
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {editingEndpoint === 'origin' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingEndpoint(null);
+                  void useCurrentLocationAsOrigin();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-500"
+              >
+                <LocateFixed className="h-3.5 w-3.5" />
+                Usar minha localização (GPS)
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const slot = editingEndpoint;
+                setEditingEndpoint(null);
+                setMapPickTarget(slot);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+              Escolher no mapa
+            </button>
+          </div>
+
+          <div className="max-h-40 space-y-0.5 overflow-y-auto ev-scroll">
+            {endpointResults.map((place) => (
+              <button
+                key={place.id}
+                type="button"
+                onClick={() => handleSelectEndpointPlace(place)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+              >
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
+                    {place.name}
+                  </div>
+                  <div className="truncate text-[10px] text-slate-500 dark:text-slate-400">
+                    {place.subtitle}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Loading State */}
       {isRouting && (
@@ -144,7 +283,7 @@ export function RoutePreviewPanel() {
         </div>
       )}
 
-      {/* Multi-Profile Route Comparison Pills (Waze / Google Maps Style) */}
+      {/* Multi-Profile Route Comparison Pills + Quick Action Toolbar right below */}
       {!isRouting && candidates.length > 0 && activeRoute && (
         <>
           {candidates.length > 1 && (
@@ -189,6 +328,114 @@ export function RoutePreviewPanel() {
             </div>
           )}
 
+          {/* Top Action Toolbar: Ajustar Rota, Parada, Salvar, GPX & Compartilhar (Right below the 3 route options) */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleEditWaypoints}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  isEditingWaypoints
+                    ? 'border-sky-600 bg-sky-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-sky-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                }`}
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+                {isEditingWaypoints ? 'Editando rota' : 'Ajustar Rota'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMapPickTarget('via')}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Parada
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRouteNameInput(activeRoute.destName ? `Rota para ${activeRoute.destName}` : activeRoute.title);
+                  setSavingName(true);
+                }}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <Bookmark className="h-3.5 w-3.5 text-emerald-600" />
+                Salvar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportGpx}
+                title="Exportar GPX"
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <Download className="h-3.5 w-3.5" />
+                GPX
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareLink}
+                title="Compartilhar link da rota"
+                aria-label="Compartilhar rota"
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Active via-points chips */}
+            {viaPoints.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {viaPoints.map((_, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 rounded-full bg-sky-500/12 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300"
+                  >
+                    <MapPin className="h-3 w-3" />
+                    Parada {idx + 1}
+                    <button
+                      type="button"
+                      onClick={() => void removeViaPoint(idx)}
+                      className="ml-0.5 hover:text-rose-500"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Inline Save Route Dialog */}
+            {savingName && (
+              <div className="flex items-center gap-1.5 rounded-xl bg-emerald-500/10 p-2">
+                <input
+                  type="text"
+                  value={routeNameInput}
+                  onChange={(e) => setRouteNameInput(e.target.value)}
+                  placeholder="Nome da rota..."
+                  className="w-full rounded-lg border border-emerald-500/30 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:outline-none dark:bg-slate-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmSave()}
+                  className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                >
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSavingName(false)}
+                  className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200/60"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Active Route Telemetry Hero Card */}
           {(() => {
             const telemetry = computeRouteTelemetry(
@@ -228,6 +475,28 @@ export function RoutePreviewPanel() {
                   >
                     <Repeat className="h-3 w-3" />
                     {isRoundTrip ? 'Ida + Volta' : 'Só Ida'}
+                  </button>
+                </div>
+
+                {/* Primary Navigation Launch CTA */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    id="eixoverde-start-nav-btn"
+                    type="button"
+                    onClick={() => startNavigation(false)}
+                    className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 active:scale-[0.99]"
+                  >
+                    <Navigation className="h-4.5 w-4.5 fill-current" />
+                    Iniciar Navegação
+                  </button>
+                  <button
+                    id="eixoverde-demo-nav-btn"
+                    type="button"
+                    onClick={() => startNavigation(true)}
+                    className="flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 py-3 text-xs font-bold text-slate-800 transition-colors hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+                    Testar
                   </button>
                 </div>
 
@@ -325,135 +594,8 @@ export function RoutePreviewPanel() {
                   </div>
                 )}
 
-                {/* Komoot Elevation & Way-Type Surface Analytics */}
+                {/* Elevation & Way-Type Surface Analytics */}
                 <ElevationProfile route={activeRoute} />
-
-                {/* Interactive Waypoint Editing Strip */}
-                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-700/60">
-                  <button
-                    type="button"
-                    onClick={toggleEditWaypoints}
-                    className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                      isEditingWaypoints
-                        ? 'border-sky-600 bg-sky-600 text-white'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-sky-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                    }`}
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    {isEditingWaypoints ? 'Editando (arraste ou toque)' : 'Ajustar Rota'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMapPickTarget('via')}
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Parada
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRouteNameInput(activeRoute.destName ? `Rota para ${activeRoute.destName}` : activeRoute.title);
-                      setSavingName(true);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    <Bookmark className="h-3.5 w-3.5 text-emerald-600" />
-                    Salvar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleExportGpx}
-                    title="Exportar GPX"
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    GPX
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleShareLink}
-                    title="Compartilhar link da rota"
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    <Share2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {/* Active via-points chips */}
-                {viaPoints.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {viaPoints.map((_, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1 rounded-full bg-sky-500/12 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300"
-                      >
-                        <MapPin className="h-3 w-3" />
-                        Parada {idx + 1}
-                        <button
-                          type="button"
-                          onClick={() => void removeViaPoint(idx)}
-                          className="ml-0.5 hover:text-rose-500"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Inline Save Route Dialog */}
-                {savingName && (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-500/10 p-2">
-                    <input
-                      type="text"
-                      value={routeNameInput}
-                      onChange={(e) => setRouteNameInput(e.target.value)}
-                      placeholder="Nome da rota..."
-                      className="w-full rounded-lg border border-emerald-500/30 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-900 focus:outline-none dark:bg-slate-900 dark:text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void handleConfirmSave()}
-                      className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
-                    >
-                      Salvar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSavingName(false)}
-                      className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200/60"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Primary Navigation Launch CTA (Waze Go Now + Test Demo) */}
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  <button
-                    id="eixoverde-start-nav-btn"
-                    type="button"
-                    onClick={() => startNavigation(false)}
-                    className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 active:scale-[0.99]"
-                  >
-                    <Navigation className="h-4.5 w-4.5 fill-current" />
-                    Iniciar Navegação
-                  </button>
-                  <button
-                    id="eixoverde-demo-nav-btn"
-                    type="button"
-                    onClick={() => startNavigation(true)}
-                    className="flex items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 py-3 text-xs font-bold text-slate-800 transition-colors hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-                  >
-                    <Play className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
-                    Testar
-                  </button>
-                </div>
               </div>
             );
           })()}
