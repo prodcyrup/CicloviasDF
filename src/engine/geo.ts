@@ -191,9 +191,14 @@ export function detectArterialCrossings(coords: Coord3D[]): CrossingWarning[] {
         if (crossingAngle < 38) continue;
 
         const dup = warnings.find(
-          (w) => w.viaId === via.id && haversineMeters(w.coords, hit) < 180
+          (w) => w.viaId === via.id && haversineMeters(w.coords, hit) < 220
         );
         if (dup) continue;
+
+        // Place visual warning marker ~45m upstream along the route so the rider is alerted BEFORE entering the avenue
+        const exactDistM = cum[i] + haversineMeters(rA, hit);
+        const approachDistM = Math.max(0, exactDistM - 45);
+        const approachCoord = interpolateAlongRoute(coords, cum, approachDistM).coord;
 
         warnings.push({
           id: `${via.id}-${warnings.length}`,
@@ -203,9 +208,9 @@ export function detectArterialCrossings(coords: Coord3D[]): CrossingWarning[] {
           danger: via.danger,
           delaySec: via.delaySec,
           note: via.note,
-          coords: hit,
+          coords: approachCoord,
           angleDeg: Math.round(crossingAngle),
-          distanceAlongM: Math.round(cum[i] + haversineMeters(rA, hit)),
+          distanceAlongM: Math.round(approachDistM),
         });
       }
     }

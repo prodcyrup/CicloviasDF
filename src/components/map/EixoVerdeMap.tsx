@@ -651,36 +651,36 @@ export function EixoVerdeMap() {
 
     if (mode === 'navigate' && nav.followUser) {
       const targetPitch = nav.pitch3D ? 56 : 0;
-      const targetBearing = nav.pitch3D ? nav.currentHeading : 0;
       map.easeTo({
         center: nav.currentPos,
         zoom: Math.max(map.getZoom(), 16.4),
-        bearing: targetBearing,
+        bearing: nav.currentHeading,
         pitch: targetPitch,
-        duration: 280,
+        duration: 240,
         easing: (t) => t,
       });
     }
   }, [nav.currentPos, nav.currentHeading, nav.followUser, mode]);
 
-  // Dedicated 3D / 2D Camera Toggle (works reliably on mobile & desktop, even if followUser is paused or GPS is waiting)
+  // Dedicated 3D / 2D Camera Toggle (flat pitch 0 in 2D while still keeping live heading rotation)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     if (mode === 'navigate') {
       map.stop();
+      const heading = useAppStore.getState().nav.currentHeading;
       if (nav.pitch3D) {
         map.touchPitch.enable();
         map.easeTo({
           pitch: 56,
-          bearing: useAppStore.getState().nav.currentHeading,
-          duration: 320,
+          bearing: heading,
+          duration: 300,
         });
       } else {
-        // Lock 2D North-Up cleanly on mobile so two-finger gestures or compass ticks never re-tilt
+        // Flat 2D top-down view that still rotates smoothly with phone compass / heading
         map.touchPitch.disable();
-        map.jumpTo({ pitch: 0, bearing: 0 });
+        map.jumpTo({ pitch: 0, bearing: heading });
       }
     } else {
       map.touchPitch.enable();
