@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Bookmark,
   Briefcase,
@@ -12,12 +12,10 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
-  Upload,
   X,
 } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 import { formatDurationPtBR } from '../../engine/geo';
-import { parseImportedRouteFile } from '../../engine/gpx';
 import { searchPlaces } from '../../engine/routing';
 import { computeRouteTelemetry } from '../../engine/telemetry';
 import { useAppStore } from '../../store/useAppStore';
@@ -28,7 +26,6 @@ export function ExplorePanel() {
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const exploreTab = useAppStore((s) => s.exploreTab);
   const setExploreTab = useAppStore((s) => s.setExploreTab);
@@ -36,7 +33,6 @@ export function ExplorePanel() {
   const loadSavedRoute = useAppStore((s) => s.loadSavedRoute);
   const toggleFavoriteRoute = useAppStore((s) => s.toggleFavoriteRoute);
   const deleteSavedRoute = useAppStore((s) => s.deleteSavedRoute);
-  const importSavedRoute = useAppStore((s) => s.importSavedRoute);
   const setDestination = useAppStore((s) => s.setDestination);
   const setMapPickTarget = useAppStore((s) => s.setMapPickTarget);
   const mapPickTarget = useAppStore((s) => s.mapPickTarget);
@@ -46,7 +42,6 @@ export function ExplorePanel() {
   const getActiveVehicle = useAppStore((s) => s.getActiveVehicle);
   const selectedModeIndex = useAppStore((s) => s.selectedModeIndex);
   const riderWeightKg = useAppStore((s) => s.riderWeightKg);
-  const pushToast = useAppStore((s) => s.pushToast);
 
   const activeVehicle = getActiveVehicle();
 
@@ -63,20 +58,7 @@ export function ExplorePanel() {
   const handleSelectPlace = (place: PlaceResult) => {
     setQuery('');
     setSearchFocused(false);
-    setDestination(place, true);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const parsed = parseImportedRouteFile(file.name, text);
-    if (parsed) {
-      await importSavedRoute(parsed);
-    } else {
-      pushToast('Arquivo inválido', 'Envie um arquivo .GPX, .KML ou .GeoJSON válido.', 'rose');
-    }
-    e.target.value = '';
+    void setDestination(place, true);
   };
 
   const curatedList = savedRoutes.filter((r) => r.isCurated);
@@ -302,24 +284,9 @@ export function ExplorePanel() {
           <MapPin className="h-3.5 w-3.5" />
           {mapPickTarget === 'dest' ? 'Toque no mapa...' : 'Marcar no Mapa'}
         </button>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-        >
-          <Upload className="h-3.5 w-3.5 text-amber-600" />
-          Importar GPX/KML
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".gpx,.kml,.geojson,.json"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
       </div>
 
-      {/* Komoot-Style Discover / Saved Segmented Switch */}
+      {/* Discover / Saved Segmented Switch */}
       <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/90">
         <button
           type="button"
@@ -360,7 +327,7 @@ export function ExplorePanel() {
               Nenhuma rota salva ainda
             </p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Pesquise um destino, importe um arquivo GPX/KML ou favorite uma rota para acessá-la aqui.
+              Pesquise um destino ou favorite uma rota para acessá-la rapidamente aqui.
             </p>
           </div>
         )}

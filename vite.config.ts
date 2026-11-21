@@ -4,8 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ command }) => {
-  // Deploy cleanly on GitHub Pages (/CicloviasDF/) while keeping local dev at /
-  const base = process.env.VITE_BASE_PATH ?? (command === 'build' ? '/CicloviasDF/' : '/');
+  // Deploy cleanly on GitHub Pages (/EixoVerde/) while keeping local dev at /
+  const base = process.env.VITE_BASE_PATH ?? (command === 'build' ? '/EixoVerde/' : '/');
 
   return {
     base,

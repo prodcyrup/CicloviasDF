@@ -328,28 +328,28 @@ export function RoutePreviewPanel() {
             </div>
           )}
 
-          {/* Top Action Toolbar: Ajustar Rota, Parada, Salvar, GPX & Compartilhar (Right below the 3 route options) */}
+          {/* Top Action Toolbar: Ajustar Rota, Parada, Salvar, GPX & Compartilhar — single line */}
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-nowrap items-center gap-1 overflow-x-auto ev-scroll">
               <button
                 type="button"
                 onClick={toggleEditWaypoints}
-                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                className={`inline-flex shrink-0 items-center gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors ${
                   isEditingWaypoints
                     ? 'border-sky-600 bg-sky-600 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-sky-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
                 }`}
               >
-                <Edit3 className="h-3.5 w-3.5" />
-                {isEditingWaypoints ? 'Editando rota' : 'Ajustar Rota'}
+                <Edit3 className="h-3 w-3 shrink-0" />
+                {isEditingWaypoints ? 'Editando' : 'Ajustar Rota'}
               </button>
 
               <button
                 type="button"
                 onClick={() => setMapPickTarget('via')}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-3 w-3 shrink-0" />
                 Parada
               </button>
 
@@ -359,9 +359,9 @@ export function RoutePreviewPanel() {
                   setRouteNameInput(activeRoute.destName ? `Rota para ${activeRoute.destName}` : activeRoute.title);
                   setSavingName(true);
                 }}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
-                <Bookmark className="h-3.5 w-3.5 text-emerald-600" />
+                <Bookmark className="h-3 w-3 shrink-0 text-emerald-600" />
                 Salvar
               </button>
 
@@ -369,9 +369,9 @@ export function RoutePreviewPanel() {
                 type="button"
                 onClick={handleExportGpx}
                 title="Exportar GPX"
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
-                <Download className="h-3.5 w-3.5" />
+                <Download className="h-3 w-3 shrink-0" />
                 GPX
               </button>
 
@@ -380,7 +380,7 @@ export function RoutePreviewPanel() {
                 onClick={handleShareLink}
                 title="Compartilhar link da rota"
                 aria-label="Compartilhar rota"
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="ml-auto inline-flex shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
                 <Share2 className="h-3.5 w-3.5" />
               </button>

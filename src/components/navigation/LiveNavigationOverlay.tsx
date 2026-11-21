@@ -181,9 +181,11 @@ export function LiveNavigationOverlay() {
     };
 
     window.addEventListener('deviceorientationabsolute', onOrientation as EventListener);
+    window.addEventListener('deviceorientation', onOrientation as EventListener);
     return () => {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
       window.removeEventListener('deviceorientationabsolute', onOrientation as EventListener);
+      window.removeEventListener('deviceorientation', onOrientation as EventListener);
     };
   }, [nav.isTracking, nav.isDemoMode, activeRoute, cumDist]);
 
