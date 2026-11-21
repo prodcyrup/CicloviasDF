@@ -171,6 +171,7 @@ function segmentIntersection(a: LngLat | Coord3D, b: LngLat | Coord3D, c: LngLat
 export function detectArterialCrossings(coords: Coord3D[]): CrossingWarning[] {
   if (coords.length < 2) return [];
   const cum = buildCumulativeDistances(coords);
+  const totalDistM = cum[cum.length - 1] || 0;
   const warnings: CrossingWarning[] = [];
 
   for (const via of DF_ARTERIAL_CORRIDORS) {
@@ -188,16 +189,26 @@ export function detectArterialCrossings(coords: Coord3D[]): CrossingWarning[] {
         const vBearing = computeBearingDeg(vA, vB);
         const rawDiff = Math.abs(normalizeAngleDiff(rBearing - vBearing));
         const crossingAngle = rawDiff > 90 ? 180 - rawDiff : rawDiff;
-        if (crossingAngle < 38) continue;
+        if (crossingAngle < 35) continue;
 
+        // Verify the macro ~70m route chord around the intersection actually traverses the corridor
+        const exactDistM = cum[i] + haversineMeters(rA, hit);
+        const beforeCoord = interpolateAlongRoute(coords, cum, Math.max(0, exactDistM - 35)).coord;
+        const afterCoord = interpolateAlongRoute(coords, cum, Math.min(totalDistM, exactDistM + 35)).coord;
+        const macroBearing = computeBearingDeg(beforeCoord, afterCoord);
+        const macroDiff = Math.abs(normalizeAngleDiff(macroBearing - vBearing));
+        const macroAngle = macroDiff > 90 ? 180 - macroDiff : macroDiff;
+        if (macroAngle < 38) continue;
+
+        // Place visual warning marker ~45m upstream along the route so the rider is alerted BEFORE entering the avenue
+        const approachDistM = Math.max(0, exactDistM - 45);
         const dup = warnings.find(
-          (w) => w.viaId === via.id && haversineMeters(w.coords, hit) < 220
+          (w) =>
+            w.viaId === via.id &&
+            (haversineMeters(w.coords, hit) < 420 || Math.abs((w.distanceAlongM ?? 0) - approachDistM) < 420)
         );
         if (dup) continue;
 
-        // Place visual warning marker ~45m upstream along the route so the rider is alerted BEFORE entering the avenue
-        const exactDistM = cum[i] + haversineMeters(rA, hit);
-        const approachDistM = Math.max(0, exactDistM - 45);
         const approachCoord = interpolateAlongRoute(coords, cum, approachDistM).coord;
 
         warnings.push({
@@ -209,7 +220,7 @@ export function detectArterialCrossings(coords: Coord3D[]): CrossingWarning[] {
           delaySec: via.delaySec,
           note: via.note,
           coords: approachCoord,
-          angleDeg: Math.round(crossingAngle),
+          angleDeg: Math.round(macroAngle),
           distanceAlongM: Math.round(approachDistM),
         });
       }
@@ -238,15 +249,21 @@ export function computeElevationStats(coords: Coord3D[]): ElevationStats {
   let descent = 0;
   let minM = elevations[0] ?? 1060;
   let maxM = elevations[0] ?? 1060;
+  let refEle = elevations[0] ?? 1060;
 
+  // Hysteresis accumulation: preserves smooth gentle climbs while filtering <1m GPS oscillation noise
   for (let i = 1; i < elevations.length; i++) {
     const val = elevations[i];
     if (val < minM) minM = val;
     if (val > maxM) maxM = val;
-    const diff = val - elevations[i - 1];
-    // Filter tiny 0.4m GPS elevation jitter
-    if (diff > 0.45) ascent += diff;
-    else if (diff < -0.45) descent += Math.abs(diff);
+    const diff = val - refEle;
+    if (diff >= 1.0) {
+      ascent += diff;
+      refEle = val;
+    } else if (diff <= -1.0) {
+      descent += Math.abs(diff);
+      refEle = val;
+    }
   }
 
   return {

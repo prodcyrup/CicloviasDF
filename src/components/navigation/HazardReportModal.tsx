@@ -81,7 +81,7 @@ export function HazardReportModal() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Observação rápida (opcional, ex: próximo à 708N)..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:bg-slate-800"
           />
 
           <div className="flex items-center justify-between gap-2">

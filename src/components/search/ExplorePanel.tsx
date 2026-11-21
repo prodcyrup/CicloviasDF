@@ -450,7 +450,7 @@ export function ExplorePanel() {
         <button
           type="button"
           onClick={() => setExploreTab('routes')}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold ${
             exploreTab === 'routes'
               ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
               : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
@@ -462,7 +462,7 @@ export function ExplorePanel() {
         <button
           type="button"
           onClick={() => setExploreTab('places')}
-          className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
+          className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold ${
             exploreTab === 'places'
               ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
               : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'

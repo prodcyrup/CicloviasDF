@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import { BRAND } from '../../config/brand';
 import { getMapStyle } from '../../config/providers';
-import { buildLaneSpatialIndex } from '../../engine/geo';
+import { buildLaneSpatialIndex, normalizeAngleDiff } from '../../engine/geo';
 import { useAppStore } from '../../store/useAppStore';
 import type { LngLat } from '../../types';
 
@@ -23,8 +23,10 @@ export function EixoVerdeMap() {
   const crossingMarkersRef = useRef<maplibregl.Marker[]>([]);
   const hazardMarkersRef = useRef<maplibregl.Marker[]>([]);
   const savedPlaceMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const contextPinMarkerRef = useRef<maplibregl.Marker | null>(null);
   const gpsMarkerRef = useRef<maplibregl.Marker | null>(null);
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const smoothedHeadingRef = useRef<number | null>(null);
 
   const theme = useAppStore((s) => s.theme);
   const basemap = useAppStore((s) => s.basemap);
@@ -38,6 +40,7 @@ export function EixoVerdeMap() {
   const mapPickTarget = useAppStore((s) => s.mapPickTarget);
   const hazards = useAppStore((s) => s.hazards);
   const savedPlaces = useAppStore((s) => s.savedPlaces);
+  const mapContextPin = useAppStore((s) => s.mapContextPin);
   const hoverCoordIndex = useAppStore((s) => s.hoverCoordIndex);
   const fitBoundsNonce = useAppStore((s) => s.fitBoundsNonce);
   const flyToTarget = useAppStore((s) => s.flyToTarget);
@@ -412,21 +415,95 @@ export function EixoVerdeMap() {
         .addTo(map);
     });
 
-    // General map click for picking origin/dest/via/hazard
+    // General map click for picking origin/dest/via/hazard or dismissing context popup
     map.on('click', (e) => {
       const st = useAppStore.getState();
       if (st.mapPickTarget || st.isEditingWaypoints) {
         void st.handleMapClick([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]);
+        return;
+      }
+      if (st.mapContextPin) {
+        st.closeMapContextPin();
       }
     });
 
+    // Desktop right-click -> open Waze-style quick place popup
+    map.on('contextmenu', (e) => {
+      const st = useAppStore.getState();
+      if (st.mode === 'navigate') return;
+      e.preventDefault();
+      void st.openMapContextPin([+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]);
+    });
+
+    // Mobile long-press (~450ms single-finger hold) -> open quick place popup
+    const canvas = map.getCanvas();
+    let longPressTimer: number | null = null;
+    let pressStartPt: { x: number; y: number } | null = null;
+
+    const cancelLongPress = () => {
+      if (longPressTimer !== null) {
+        window.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      pressStartPt = null;
+    };
+
+    const onTouchStart = (ev: TouchEvent) => {
+      if (ev.touches.length !== 1) {
+        cancelLongPress();
+        return;
+      }
+      const st = useAppStore.getState();
+      if (st.mode === 'navigate' || st.mapPickTarget) return;
+      const touch = ev.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      pressStartPt = { x, y };
+
+      longPressTimer = window.setTimeout(() => {
+        longPressTimer = null;
+        if (!pressStartPt) return;
+        const lngLat = map.unproject([pressStartPt.x, pressStartPt.y]);
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate(18);
+          } catch {
+            // Ignore
+          }
+        }
+        void useAppStore.getState().openMapContextPin([+lngLat.lng.toFixed(6), +lngLat.lat.toFixed(6)]);
+      }, 450);
+    };
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (!pressStartPt || ev.touches.length !== 1) {
+        cancelLongPress();
+        return;
+      }
+      const touch = ev.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const dx = touch.clientX - rect.left - pressStartPt.x;
+      const dy = touch.clientY - rect.top - pressStartPt.y;
+      if (dx * dx + dy * dy > 100) {
+        cancelLongPress();
+      }
+    };
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('touchend', cancelLongPress, { passive: true });
+    canvas.addEventListener('touchcancel', cancelLongPress, { passive: true });
+
     // If user drags map during live nav, pause auto-follow so they can pan freely
     map.on('dragstart', () => {
+      cancelLongPress();
       const st = useAppStore.getState();
       if (st.mode === 'navigate' && st.nav.followUser) {
         st.updateNavTelemetry({ followUser: false });
       }
     });
+    map.on('zoomstart', cancelLongPress);
 
     // Hover cursor feedback
     ['ev-alt-routes-line', 'ev-pois-circle', 'ev-lanes-dedicated'].forEach((layerId) => {
@@ -439,6 +516,11 @@ export function EixoVerdeMap() {
     });
 
     return () => {
+      cancelLongPress();
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', cancelLongPress);
+      canvas.removeEventListener('touchcancel', cancelLongPress);
       map.remove();
       mapRef.current = null;
       styleReadyRef.current = false;
@@ -650,7 +732,35 @@ export function EixoVerdeMap() {
     }
   }, [hoverCoordIndex, candidates, selectedCandidateIdx]);
 
-  // Live GPS / Demo Navigation Puck & Camera Follow
+  // Long-press / Right-click dropped target pin marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!mapContextPin || mode === 'navigate') {
+      contextPinMarkerRef.current?.remove();
+      contextPinMarkerRef.current = null;
+      return;
+    }
+
+    if (!contextPinMarkerRef.current) {
+      const el = document.createElement('div');
+      el.className = 'relative flex items-center justify-center';
+      el.innerHTML = `
+        <div class="gps-pulse-ring" style="position:absolute;width:36px;height:36px;border-radius:999px;background:rgba(244,63,94,0.32)"></div>
+        <div style="width:26px;height:26px;border-radius:999px 999px 999px 4px;transform:rotate(-45deg);background:#f43f5e;border:3px solid #ffffff;box-shadow:0 6px 16px rgba(0,0,0,0.38);display:flex;align-items:center;justify-content:center">
+          <div style="width:8px;height:8px;border-radius:999px;background:#ffffff"></div>
+        </div>
+      `;
+      contextPinMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat(mapContextPin.coords)
+        .addTo(map);
+    } else {
+      contextPinMarkerRef.current.setLngLat(mapContextPin.coords);
+    }
+  }, [mapContextPin, mode]);
+
+  // Live GPS / Demo Navigation Puck & Silky Camera Follow
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -658,6 +768,7 @@ export function EixoVerdeMap() {
     if (!nav.currentPos) {
       gpsMarkerRef.current?.remove();
       gpsMarkerRef.current = null;
+      smoothedHeadingRef.current = null;
       return;
     }
 
@@ -666,7 +777,7 @@ export function EixoVerdeMap() {
       el.className = 'relative flex items-center justify-center';
       el.innerHTML = `
         <div class="gps-pulse-ring" style="position:absolute;width:44px;height:44px;border-radius:999px;background:rgba(16,185,129,0.28)"></div>
-        <div data-puck-arrow style="width:34px;height:34px;border-radius:999px;background:#059669;border:3px solid #ffffff;box-shadow:0 6px 16px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;transition:transform 0.18s linear">
+        <div data-puck-arrow style="width:34px;height:34px;border-radius:999px;background:#059669;border:3px solid #ffffff;box-shadow:0 6px 16px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;transition:transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2L19 21L12 17L5 21L12 2Z"/></svg>
         </div>
       `;
@@ -677,9 +788,17 @@ export function EixoVerdeMap() {
       gpsMarkerRef.current.setLngLat(nav.currentPos);
     }
 
+    // Apply gentle exponential low-pass angular smoothing so curves & compass turns glide cleanly
+    const prevHeading = smoothedHeadingRef.current;
+    const smoothHeading =
+      prevHeading === null
+        ? nav.currentHeading
+        : (prevHeading + normalizeAngleDiff(nav.currentHeading - prevHeading) * 0.45 + 360) % 360;
+    smoothedHeadingRef.current = smoothHeading;
+
     const arrow = gpsMarkerRef.current.getElement().querySelector('[data-puck-arrow]') as HTMLElement | null;
     if (arrow) {
-      arrow.style.transform = `rotate(${nav.currentHeading}deg)`;
+      arrow.style.transform = `rotate(${smoothHeading}deg)`;
     }
 
     if (mode === 'navigate' && nav.followUser) {
@@ -687,10 +806,10 @@ export function EixoVerdeMap() {
       map.easeTo({
         center: nav.currentPos,
         zoom: Math.max(map.getZoom(), 16.4),
-        bearing: nav.currentHeading,
+        bearing: smoothHeading,
         pitch: targetPitch,
-        duration: 240,
-        easing: (t) => t,
+        duration: 360,
+        easing: (t) => 1 - Math.pow(1 - t, 3),
       });
     }
   }, [nav.currentPos, nav.currentHeading, nav.followUser, mode]);
@@ -702,13 +821,14 @@ export function EixoVerdeMap() {
 
     if (mode === 'navigate') {
       map.stop();
-      const heading = useAppStore.getState().nav.currentHeading;
+      const heading = smoothedHeadingRef.current ?? useAppStore.getState().nav.currentHeading;
       if (nav.pitch3D) {
         map.touchPitch.enable();
         map.easeTo({
           pitch: 56,
           bearing: heading,
-          duration: 300,
+          duration: 360,
+          easing: (t) => 1 - Math.pow(1 - t, 3),
         });
       } else {
         // Flat 2D top-down view that still rotates smoothly with phone compass / heading
@@ -717,8 +837,9 @@ export function EixoVerdeMap() {
       }
     } else {
       map.touchPitch.enable();
+      smoothedHeadingRef.current = null;
       if (map.getPitch() > 2 || Math.abs(map.getBearing()) > 1) {
-        map.easeTo({ pitch: 0, bearing: 0, duration: 450 });
+        map.easeTo({ pitch: 0, bearing: 0, duration: 480, easing: (t) => 1 - Math.pow(1 - t, 3) });
       }
     }
   }, [nav.pitch3D, mode]);

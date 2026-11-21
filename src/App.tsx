@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { CompareBuyModal } from './components/catalog/CompareBuyModal';
 import { VehicleGarageModal } from './components/garage/VehicleGarageModal';
 import { EixoVerdeMap } from './components/map/EixoVerdeMap';
+import { MapContextPopup } from './components/map/MapContextPopup';
 import { HazardReportModal } from './components/navigation/HazardReportModal';
 import { LiveNavigationOverlay } from './components/navigation/LiveNavigationOverlay';
 import { SavePlaceModal } from './components/search/SavePlaceModal';
@@ -26,7 +27,8 @@ export function App() {
       {/* Unified UI: Seamless transition between Explore/Plan/Preview and Live Handlebar Navigation */}
       {mode === 'navigate' ? <LiveNavigationOverlay /> : <AdaptiveShell />}
 
-      {/* Modals & Drawers */}
+      {/* Modals, Popups & Drawers */}
+      {mode !== 'navigate' && <MapContextPopup />}
       <AppMenuDrawer />
       <VehicleGarageModal />
       <CompareBuyModal />

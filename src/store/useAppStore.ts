@@ -110,6 +110,7 @@ export interface AppStore {
   hazardPickerOpen: boolean;
   pendingHazardCoords: LngLat | null;
   pendingSavePlace: { place: PlaceResult; defaultCategory: SavedPlaceCategory } | null;
+  mapContextPin: { coords: LngLat; place: PlaceResult | null; loading: boolean } | null;
   toasts: ToastMessage[];
 
   // Actions
@@ -139,6 +140,8 @@ export interface AppStore {
   swapOriginDest: () => void;
   setMapPickTarget: (target: MapPickTarget) => void;
   handleMapClick: (coords: LngLat) => Promise<void>;
+  openMapContextPin: (coords: LngLat) => Promise<void>;
+  closeMapContextPin: () => void;
   recalculateRoute: (customWaypoints?: LngLat[]) => Promise<void>;
   selectCandidate: (idx: number) => void;
   toggleEditWaypoints: () => void;
@@ -296,6 +299,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   hazardPickerOpen: false,
   pendingHazardCoords: null,
   pendingSavePlace: null,
+  mapContextPin: null,
   toasts: [],
 
   async bootstrap() {
@@ -602,6 +606,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
         target === 'save_home' ? 'home' : target === 'save_work' ? 'work' : 'favorite';
       set({ pendingSavePlace: { place, defaultCategory: cat } });
     }
+  },
+
+  async openMapContextPin(coords) {
+    const cleanCoords: LngLat = [+coords[0].toFixed(6), +coords[1].toFixed(6)];
+    set({ mapContextPin: { coords: cleanCoords, place: null, loading: true } });
+    const place = await reverseGeocode(cleanCoords);
+    // Only update if user hasn't dismissed or opened another pin in the meantime
+    const current = get().mapContextPin;
+    if (
+      current &&
+      current.coords[0] === cleanCoords[0] &&
+      current.coords[1] === cleanCoords[1]
+    ) {
+      set({ mapContextPin: { coords: cleanCoords, place, loading: false } });
+    }
+  },
+
+  closeMapContextPin() {
+    set({ mapContextPin: null });
   },
 
   async recalculateRoute(customWaypoints) {

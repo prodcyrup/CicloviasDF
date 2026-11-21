@@ -35,8 +35,16 @@ export function AppMenuDrawer() {
   const savedRoutes = useAppStore((s) => s.savedRoutes);
   const savedPlaces = useAppStore((s) => s.savedPlaces);
   const hazards = useAppStore((s) => s.hazards);
+  const currentLocationPlace = useAppStore((s) => s.currentLocationPlace);
 
   if (!open) return null;
+
+  const locationParts = [currentLocationPlace?.district, currentLocationPlace?.city].filter(Boolean);
+  const locationLabel =
+    locationParts.length > 0
+      ? locationParts.join(', ')
+      : currentLocationPlace?.city || 'Brasília, DF';
+  const versionSubtitle = `${locationLabel} • v${__APP_VERSION__}`;
 
   return (
     <div className="fixed inset-0 z-50 flex bg-slate-950/55 backdrop-blur-xs" onClick={() => setMenuOpen(false)}>
@@ -46,14 +54,14 @@ export function AppMenuDrawer() {
       >
         {/* Brand Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <img src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`} alt={BRAND.name} className="h-9 w-9 rounded-xl shadow-sm" />
-            <div>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img src={`${import.meta.env.BASE_URL}icons/eixoverde-icon.svg`} alt={BRAND.name} className="h-9 w-9 shrink-0 rounded-xl shadow-sm" />
+            <div className="min-w-0">
               <div className="font-display text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
                 {BRAND.name}
               </div>
-              <div className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                {BRAND.regionLabel}
+              <div className="truncate text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                {versionSubtitle}
               </div>
             </div>
           </div>
