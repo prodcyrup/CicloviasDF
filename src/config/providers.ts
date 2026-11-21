@@ -1,10 +1,17 @@
 import type { MapBasemapMode, ThemeMode } from '../types';
 
-const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+export interface SupabaseConfig {
+  url: string;
+  anonKey: string;
+}
 
 export const API_KEYS = {
-  maptiler: env?.VITE_MAPTILER_KEY?.trim() || '',
-  ors: env?.VITE_ORS_KEY?.trim() || '',
+  get maptiler(): string {
+    return (import.meta.env?.VITE_MAPTILER_KEY ?? '').trim();
+  },
+  get ors(): string {
+    return (import.meta.env?.VITE_ORS_KEY ?? '').trim();
+  },
 };
 
 export function hasMapTilerKey(): boolean {
@@ -13,6 +20,57 @@ export function hasMapTilerKey(): boolean {
 
 export function hasOrsKey(): boolean {
   return API_KEYS.ors.length > 6;
+}
+
+/**
+ * Dynamically resolves and validates Supabase configuration from Vite env vars.
+ * Accepts both modern Publishable keys (`sb_publishable_...`) and legacy JWT
+ * `anon` keys (`eyJ...`). Returns `null` cleanly in Guest/Local mode when
+ * either variable is missing, blank, partial, or invalid.
+ */
+export function getSupabaseConfig(): SupabaseConfig | null {
+  const rawUrl = (import.meta.env?.VITE_SUPABASE_URL ?? '').trim();
+  const rawKey = (import.meta.env?.VITE_SUPABASE_ANON_KEY ?? '').trim();
+
+  if (!rawUrl || !rawKey) {
+    return null;
+  }
+
+  if (/\s/.test(rawUrl) || /\s/.test(rawKey)) {
+    return null;
+  }
+
+  if (rawKey.length < 16) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+
+  const isHttps = parsed.protocol === 'https:' && parsed.hostname.length > 0;
+  const isLocalHttp =
+    parsed.protocol === 'http:' &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+
+  if (!isHttps && !isLocalHttp) {
+    return null;
+  }
+
+  const url = rawUrl.replace(/\/+$/, '');
+  return { url, anonKey: rawKey };
+}
+
+export function hasSupabaseConfig(): boolean {
+  return getSupabaseConfig() !== null;
+}
+
+export function getOrsProxyUrl(): string | null {
+  const cfg = getSupabaseConfig();
+  return cfg ? `${cfg.url}/functions/v1/ors-proxy` : null;
 }
 
 /**

@@ -17,6 +17,16 @@ export default defineConfig(({ command }) => {
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version || '1.0.0'),
     },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'zustand',
+        'lucide-react',
+        'maplibre-gl',
+        '@supabase/supabase-js',
+      ],
+    },
     plugins: [
       react(),
       tailwindcss(),
@@ -48,6 +58,14 @@ export default defineConfig(({ command }) => {
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           runtimeCaching: [
             {
+              urlPattern: /\/(auth|rest|functions|storage|realtime)\/v1\//i,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^https:\/\/[^/]+\.supabase\.co\//i,
+              handler: 'NetworkOnly',
+            },
+            {
               urlPattern: /\/data\/ciclomapa-df-.*\.geojson$/,
               handler: 'CacheFirst',
               options: {
@@ -63,11 +81,12 @@ export default defineConfig(({ command }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks: {
-            maplibre: ['maplibre-gl'],
-            react: ['react', 'react-dom'],
-            icons: ['lucide-react'],
-            state: ['zustand'],
+          manualChunks(id) {
+            if (id.includes('node_modules/maplibre-gl')) return 'maplibre';
+            if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'react';
+            if (id.includes('node_modules/lucide-react')) return 'icons';
+            if (id.includes('node_modules/zustand')) return 'state';
+            if (id.includes('node_modules/@supabase/')) return 'supabase';
           },
         },
       },
