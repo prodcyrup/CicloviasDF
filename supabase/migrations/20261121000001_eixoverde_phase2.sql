@@ -74,9 +74,12 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  IF NEW.coords IS NULL
-     OR jsonb_typeof(NEW.coords) <> 'array'
-     OR jsonb_array_length(NEW.coords) < 2 THEN
+  IF NEW.coords IS NULL OR jsonb_typeof(NEW.coords) <> 'array' THEN
+    NEW.geom := NULL;
+    RETURN NEW;
+  END IF;
+
+  IF jsonb_array_length(NEW.coords) < 2 THEN
     NEW.geom := NULL;
     RETURN NEW;
   END IF;
@@ -85,19 +88,23 @@ BEGIN
     SELECT
       ord,
       CASE
-        WHEN jsonb_typeof(elem) = 'array'
-         AND jsonb_array_length(elem) >= 2
-         AND jsonb_typeof(elem->0) = 'number'
-         AND jsonb_typeof(elem->1) = 'number'
-        THEN (elem->>0)::double precision
+        WHEN jsonb_typeof(elem) = 'array' THEN
+          CASE
+            WHEN jsonb_typeof(elem->0) = 'number'
+             AND jsonb_typeof(elem->1) = 'number'
+            THEN (elem->>0)::double precision
+            ELSE NULL
+          END
         ELSE NULL
       END AS lng,
       CASE
-        WHEN jsonb_typeof(elem) = 'array'
-         AND jsonb_array_length(elem) >= 2
-         AND jsonb_typeof(elem->0) = 'number'
-         AND jsonb_typeof(elem->1) = 'number'
-        THEN (elem->>1)::double precision
+        WHEN jsonb_typeof(elem) = 'array' THEN
+          CASE
+            WHEN jsonb_typeof(elem->0) = 'number'
+             AND jsonb_typeof(elem->1) = 'number'
+            THEN (elem->>1)::double precision
+            ELSE NULL
+          END
         ELSE NULL
       END AS lat
     FROM jsonb_array_elements(NEW.coords) WITH ORDINALITY AS arr(elem, ord)
@@ -541,7 +548,8 @@ BEGIN
         AND c.user_id IS DISTINCT FROM h.user_id
     ),
     updated_at = now()
-  WHERE h.id = v_hazard_id;
+  WHERE h.id = v_hazard_id
+    AND h.deleted_at IS NULL;
 
   RETURN NULL;
 END;
@@ -570,7 +578,15 @@ CREATE POLICY "hazard_confirmations_insert_own"
   ON public.hazard_confirmations
   FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM public.hazard_reports h
+      WHERE h.id = hazard_id
+        AND h.deleted_at IS NULL
+    )
+  );
 
 DROP POLICY IF EXISTS "hazard_confirmations_delete_own" ON public.hazard_confirmations;
 CREATE POLICY "hazard_confirmations_delete_own"
@@ -688,30 +704,52 @@ BEGIN
   v_max_lat := GREATEST(-90.0, LEAST(90.0, GREATEST(min_lat, max_lat)));
   v_limit := LEAST(GREATEST(COALESCE(max_results, 200), 1), 500);
 
-  RETURN QUERY
-  SELECT
-    h.id,
-    h.user_id,
-    h.kind,
-    h.title,
-    h.note,
-    h.lng,
-    h.lat,
-    h.confirmations,
-    EXISTS (
-      SELECT 1
-      FROM public.hazard_confirmations hc
-      WHERE hc.hazard_id = h.id
-        AND hc.user_id = auth.uid()
-    ) AS confirmed_by_me,
-    h.created_at,
-    h.updated_at
-  FROM public.hazard_reports h
-  WHERE h.deleted_at IS NULL
-    AND h.location IS NOT NULL
-    AND h.location && ST_MakeEnvelope(v_min_lng, v_min_lat, v_max_lng, v_max_lat, 4326)
-  ORDER BY h.updated_at DESC
-  LIMIT v_limit;
+  IF auth.uid() IS NULL OR NOT has_table_privilege('public.hazard_confirmations', 'SELECT') THEN
+    RETURN QUERY
+    SELECT
+      h.id,
+      h.user_id,
+      h.kind,
+      h.title,
+      h.note,
+      h.lng,
+      h.lat,
+      h.confirmations,
+      false AS confirmed_by_me,
+      h.created_at,
+      h.updated_at
+    FROM public.hazard_reports h
+    WHERE h.deleted_at IS NULL
+      AND h.location IS NOT NULL
+      AND h.location && ST_MakeEnvelope(v_min_lng, v_min_lat, v_max_lng, v_max_lat, 4326)
+    ORDER BY h.updated_at DESC
+    LIMIT v_limit;
+  ELSE
+    RETURN QUERY
+    SELECT
+      h.id,
+      h.user_id,
+      h.kind,
+      h.title,
+      h.note,
+      h.lng,
+      h.lat,
+      h.confirmations,
+      EXISTS (
+        SELECT 1
+        FROM public.hazard_confirmations hc
+        WHERE hc.hazard_id = h.id
+          AND hc.user_id = auth.uid()
+      ) AS confirmed_by_me,
+      h.created_at,
+      h.updated_at
+    FROM public.hazard_reports h
+    WHERE h.deleted_at IS NULL
+      AND h.location IS NOT NULL
+      AND h.location && ST_MakeEnvelope(v_min_lng, v_min_lat, v_max_lng, v_max_lat, 4326)
+    ORDER BY h.updated_at DESC
+    LIMIT v_limit;
+  END IF;
 END;
 $$;
 

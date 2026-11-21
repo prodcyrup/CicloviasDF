@@ -5,6 +5,7 @@ import {
   hasSupabaseConfig,
 } from '../providers';
 import {
+  createSafeAuthStorage,
   getSupabaseClient,
   resetSupabaseClientForTests,
 } from '../../cloud/supabaseClient';
@@ -15,6 +16,7 @@ const VALID_LEGACY_JWT_KEY =
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   resetSupabaseClientForTests();
 });
 
@@ -145,6 +147,69 @@ describe('providers.ts Supabase config auto-detection', () => {
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'sb_publishable_abc\ndef123456789');
     expect(getSupabaseConfig()).toBeNull();
   });
+
+  it('rejects credential-bearing, query-string, and hash-fragment URLs', () => {
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', VALID_PUBLISHABLE_KEY);
+
+    const rejectedUrls = [
+      'https://user:pass@evil.supabase.co',
+      'https://user@evil.supabase.co',
+      'https://demo.supabase.co?foo=bar',
+      'https://demo.supabase.co?',
+      'https://demo.supabase.co#frag',
+      'https://demo.supabase.co#',
+    ];
+
+    for (const badUrl of rejectedUrls) {
+      vi.stubEnv('VITE_SUPABASE_URL', badUrl);
+      expect(getSupabaseConfig(), `Expected "${badUrl}" to be rejected`).toBeNull();
+      expect(hasSupabaseConfig()).toBe(false);
+      expect(getOrsProxyUrl()).toBeNull();
+    }
+  });
+
+  it('normalizes uppercase scheme/host and preserves valid self-hosted subpaths', () => {
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', VALID_PUBLISHABLE_KEY);
+
+    vi.stubEnv('VITE_SUPABASE_URL', 'HTTPS://DEMO.SUPABASE.CO/');
+    expect(getSupabaseConfig()).toEqual({
+      url: 'https://demo.supabase.co',
+      anonKey: VALID_PUBLISHABLE_KEY,
+    });
+    expect(getOrsProxyUrl()).toBe('https://demo.supabase.co/functions/v1/ors-proxy');
+
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://demo.supabase.co/subpath/');
+    expect(getSupabaseConfig()).toEqual({
+      url: 'https://demo.supabase.co/subpath',
+      anonKey: VALID_PUBLISHABLE_KEY,
+    });
+    expect(getOrsProxyUrl()).toBe('https://demo.supabase.co/subpath/functions/v1/ors-proxy');
+  });
+
+  it('rejects non-ByteString and control-character keys that would break fetch Headers', () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://demo.supabase.co');
+
+    const badEnvKeys = [
+      'sb_publishable_abc\u200Bdef123456',
+      'sb_publishable_abc\u00A0def123456',
+      'sb_publishable_abc\x01def123456',
+      'sb_publishable_abc\x7Fdef123456',
+    ];
+
+    for (const badKey of badEnvKeys) {
+      vi.stubEnv('VITE_SUPABASE_ANON_KEY', badKey);
+      expect(getSupabaseConfig(), `Expected key "${badKey}" to be rejected`).toBeNull();
+      expect(hasSupabaseConfig()).toBe(false);
+    }
+
+    // POSIX process.env truncates at NUL (\x00), so pass via env override to test NUL rejection directly
+    expect(
+      getSupabaseConfig({
+        VITE_SUPABASE_URL: 'https://demo.supabase.co',
+        VITE_SUPABASE_ANON_KEY: 'sb_publishable_abc\x00def123456',
+      }),
+    ).toBeNull();
+  });
 });
 
 describe('supabaseClient.ts lazy singleton', () => {
@@ -187,5 +252,93 @@ describe('supabaseClient.ts lazy singleton', () => {
     expect(typeof client?.auth.getSession).toBe('function');
     expect(typeof client?.from).toBe('function');
     expect(typeof client?.rpc).toBe('function');
+  });
+});
+
+describe('createSafeAuthStorage fallback behavior', () => {
+  it('preserves session values in memory under Safari QuotaExceededError and clears cleanly', () => {
+    const backing = new Map<string, string>();
+    let failWrites = true;
+
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => backing.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          if (failWrites) {
+            throw new DOMException('Quota exceeded', 'QuotaExceededError');
+          }
+          backing.set(key, value);
+        },
+        removeItem: (key: string) => {
+          backing.delete(key);
+        },
+      },
+    });
+
+    const storage = createSafeAuthStorage();
+    const sessionJson = JSON.stringify({ access_token: 'tok_quota_123' });
+
+    storage.setItem('eixoverde_auth_v1', sessionJson);
+    expect(backing.get('eixoverde_auth_v1')).toBeUndefined();
+    expect(storage.getItem('eixoverde_auth_v1')).toBe(sessionJson);
+
+    // Once quota recovers and localStorage writes succeed, memory entry is cleared
+    failWrites = false;
+    const refreshedJson = JSON.stringify({ access_token: 'tok_recovered_456' });
+    storage.setItem('eixoverde_auth_v1', refreshedJson);
+    expect(backing.get('eixoverde_auth_v1')).toBe(refreshedJson);
+    expect(storage.getItem('eixoverde_auth_v1')).toBe(refreshedJson);
+
+    // Simulate another quota error overriding a stale localStorage value
+    failWrites = true;
+    const latestJson = JSON.stringify({ access_token: 'tok_latest_789' });
+    storage.setItem('eixoverde_auth_v1', latestJson);
+    expect(storage.getItem('eixoverde_auth_v1')).toBe(latestJson);
+
+    // removeItem clears both memory and localStorage
+    storage.removeItem('eixoverde_auth_v1');
+    expect(storage.getItem('eixoverde_auth_v1')).toBeNull();
+    expect(backing.has('eixoverde_auth_v1')).toBe(false);
+  });
+
+  it('falls back seamlessly when localStorage throws SecurityError on all operations or getter access', () => {
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: () => {
+          throw new DOMException('Access denied', 'SecurityError');
+        },
+        setItem: () => {
+          throw new DOMException('Access denied', 'SecurityError');
+        },
+        removeItem: () => {
+          throw new DOMException('Access denied', 'SecurityError');
+        },
+      },
+    });
+
+    const storage = createSafeAuthStorage();
+    expect(storage.getItem('eixoverde_auth_v1')).toBeNull();
+
+    storage.setItem('eixoverde_auth_v1', '{"access_token":"tok_sec_1"}');
+    expect(storage.getItem('eixoverde_auth_v1')).toBe('{"access_token":"tok_sec_1"}');
+
+    storage.removeItem('eixoverde_auth_v1');
+    expect(storage.getItem('eixoverde_auth_v1')).toBeNull();
+
+    // Also verify when accessing window.localStorage getter itself throws SecurityError
+    const restrictedWindow = {};
+    Object.defineProperty(restrictedWindow, 'localStorage', {
+      get() {
+        throw new DOMException('Blocked storage access', 'SecurityError');
+      },
+    });
+    vi.stubGlobal('window', restrictedWindow);
+
+    const getterBlockedStorage = createSafeAuthStorage();
+    expect(getterBlockedStorage.getItem('eixoverde_auth_v1')).toBeNull();
+    getterBlockedStorage.setItem('eixoverde_auth_v1', '{"access_token":"tok_sec_2"}');
+    expect(getterBlockedStorage.getItem('eixoverde_auth_v1')).toBe('{"access_token":"tok_sec_2"}');
+    getterBlockedStorage.removeItem('eixoverde_auth_v1');
+    expect(getterBlockedStorage.getItem('eixoverde_auth_v1')).toBeNull();
   });
 });

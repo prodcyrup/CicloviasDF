@@ -13,11 +13,14 @@ let cached: CachedClient | null = null;
  * where `window.localStorage` throws SecurityError/QuotaExceededError) and in
  * pure Node environments (Vitest).
  */
-function createSafeAuthStorage(): SupportedStorage {
+export function createSafeAuthStorage(): SupportedStorage {
   const memory = new Map<string, string>();
 
   return {
     getItem(key: string): string | null {
+      if (memory.has(key)) {
+        return memory.get(key) ?? null;
+      }
       if (typeof window !== 'undefined') {
         try {
           return window.localStorage.getItem(key);
@@ -31,6 +34,7 @@ function createSafeAuthStorage(): SupportedStorage {
       if (typeof window !== 'undefined') {
         try {
           window.localStorage.setItem(key, value);
+          memory.delete(key);
           return;
         } catch {
           // Fall back to in-memory storage

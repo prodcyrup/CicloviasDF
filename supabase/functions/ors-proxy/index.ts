@@ -30,14 +30,15 @@ const CORS_HEADERS: Record<string, string> = {
 };
 
 const RATE_WINDOW_MS = 60_000;
-const AUTH_LIMIT_PER_WINDOW = 60;
-const GUEST_LIMIT_PER_WINDOW = 30;
+const IP_LIMIT_PER_WINDOW = 60;
+const USER_LIMIT_PER_WINDOW = 60;
 const MAX_RATE_BUCKETS = 1_000;
 const UPSTREAM_TIMEOUT_MS = 8_500;
 const MAX_COORDINATES = 25;
 
-// Sliding-window timestamps keyed by caller identity (`user:<sub|uid>` or `ip:<caller>`).
-const rateBuckets = new Map<string, number[]>();
+// Separate sliding-window maps so forged JWT `sub` floods can never evict real IP buckets.
+const ipRateBuckets = new Map<string, number[]>();
+const userRateBuckets = new Map<string, number[]>();
 
 function jsonResponse(
   body: Record<string, unknown>,
@@ -81,61 +82,94 @@ function decodeJwtSubject(authHeader: string | null): string | null {
   return null;
 }
 
-function resolveCallerBucket(req: Request): { key: string; limit: number } {
-  const sub = decodeJwtSubject(req.headers.get('authorization'));
-  if (sub) {
-    return { key: `user:${sub}`, limit: AUTH_LIMIT_PER_WINDOW };
-  }
-
-  const xff = req.headers.get('x-forwarded-for');
-  const firstForwardedIp = xff?.split(',')[0]?.trim();
+function resolveCallerIp(req: Request): string {
   const cfIp = req.headers.get('cf-connecting-ip')?.trim();
   const realIp = req.headers.get('x-real-ip')?.trim();
+  const xff = req.headers.get('x-forwarded-for');
+  const firstForwardedIp = xff?.split(',')[0]?.trim();
   const apiKey = req.headers.get('apikey')?.trim();
   const maskedApiKey = apiKey ? `key:${apiKey.slice(0, 12)}` : '';
 
-  const caller = firstForwardedIp || cfIp || realIp || maskedApiKey || 'anonymous';
-  return { key: `ip:${caller}`, limit: GUEST_LIMIT_PER_WINDOW };
+  const caller = cfIp || realIp || firstForwardedIp || maskedApiKey || 'anonymous';
+  return `ip:${caller}`;
 }
 
-function checkRateLimit(
+function pruneBuckets(
+  buckets: Map<string, number[]>,
+  targetKey: string,
+  cutoff: number,
+): void {
+  if (buckets.size < MAX_RATE_BUCKETS) {
+    return;
+  }
+
+  for (const [bucketKey, timestamps] of buckets.entries()) {
+    const fresh = timestamps.filter((t) => t > cutoff);
+    if (fresh.length === 0) {
+      buckets.delete(bucketKey);
+    } else {
+      buckets.set(bucketKey, fresh);
+    }
+  }
+
+  // Hard cap fallback: evict oldest inserted entry if still at capacity
+  if (buckets.size >= MAX_RATE_BUCKETS && !buckets.has(targetKey)) {
+    const oldestKey = buckets.keys().next().value;
+    if (oldestKey !== undefined) {
+      buckets.delete(oldestKey);
+    }
+  }
+}
+
+function inspectBucket(
+  buckets: Map<string, number[]>,
   key: string,
   limit: number,
   nowMs: number,
-): { allowed: boolean; retryAfterSec: number } {
+): { allowed: boolean; retryAfterSec: number; recent: number[] } {
   const cutoff = nowMs - RATE_WINDOW_MS;
+  pruneBuckets(buckets, key, cutoff);
 
-  // Prune stale buckets if the map grows large in warm isolates
-  if (rateBuckets.size >= MAX_RATE_BUCKETS) {
-    for (const [bucketKey, timestamps] of rateBuckets.entries()) {
-      const fresh = timestamps.filter((t) => t > cutoff);
-      if (fresh.length === 0) {
-        rateBuckets.delete(bucketKey);
-      } else {
-        rateBuckets.set(bucketKey, fresh);
-      }
-    }
-    // Hard cap fallback: evict oldest inserted entry if still at capacity
-    if (rateBuckets.size >= MAX_RATE_BUCKETS && !rateBuckets.has(key)) {
-      const oldestKey = rateBuckets.keys().next().value;
-      if (oldestKey !== undefined) {
-        rateBuckets.delete(oldestKey);
-      }
-    }
-  }
-
-  const existing = rateBuckets.get(key) ?? [];
+  const existing = buckets.get(key) ?? [];
   const recent = existing.filter((t) => t > cutoff);
 
   if (recent.length >= limit) {
-    rateBuckets.set(key, recent);
+    buckets.set(key, recent);
     const oldest = recent[0];
     const retryAfterSec = Math.max(1, Math.ceil((oldest + RATE_WINDOW_MS - nowMs) / 1000));
-    return { allowed: false, retryAfterSec };
+    return { allowed: false, retryAfterSec, recent };
   }
 
-  recent.push(nowMs);
-  rateBuckets.set(key, recent);
+  return { allowed: true, retryAfterSec: 0, recent };
+}
+
+function checkCallerRateLimit(
+  req: Request,
+  nowMs: number,
+): { allowed: boolean; retryAfterSec: number } {
+  const ipKey = resolveCallerIp(req);
+  const ipCheck = inspectBucket(ipRateBuckets, ipKey, IP_LIMIT_PER_WINDOW, nowMs);
+  if (!ipCheck.allowed) {
+    return { allowed: false, retryAfterSec: ipCheck.retryAfterSec };
+  }
+
+  const sub = decodeJwtSubject(req.headers.get('authorization'));
+  if (sub) {
+    const userKey = `user:${sub}`;
+    const userCheck = inspectBucket(userRateBuckets, userKey, USER_LIMIT_PER_WINDOW, nowMs);
+    if (!userCheck.allowed) {
+      return { allowed: false, retryAfterSec: userCheck.retryAfterSec };
+    }
+
+    ipCheck.recent.push(nowMs);
+    ipRateBuckets.set(ipKey, ipCheck.recent);
+    userCheck.recent.push(nowMs);
+    userRateBuckets.set(userKey, userCheck.recent);
+    return { allowed: true, retryAfterSec: 0 };
+  }
+
+  ipCheck.recent.push(nowMs);
+  ipRateBuckets.set(ipKey, ipCheck.recent);
   return { allowed: true, retryAfterSec: 0 };
 }
 
@@ -250,8 +284,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: 'ORS_API_KEY not configured' }, 503);
   }
 
-  const { key: bucketKey, limit } = resolveCallerBucket(req);
-  const rate = checkRateLimit(bucketKey, limit, Date.now());
+  const rate = checkCallerRateLimit(req, Date.now());
   if (!rate.allowed) {
     return jsonResponse(
       { error: 'Rate limit exceeded' },
@@ -327,7 +360,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       },
     });
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    if ((err instanceof DOMException || err instanceof Error) && err.name === 'AbortError') {
       return jsonResponse({ error: 'Upstream routing request timed out' }, 504);
     }
     return jsonResponse({ error: 'Unable to reach upstream routing service' }, 502);

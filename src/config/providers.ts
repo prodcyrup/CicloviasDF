@@ -28,19 +28,23 @@ export function hasOrsKey(): boolean {
  * `anon` keys (`eyJ...`). Returns `null` cleanly in Guest/Local mode when
  * either variable is missing, blank, partial, or invalid.
  */
-export function getSupabaseConfig(): SupabaseConfig | null {
-  const rawUrl = (import.meta.env?.VITE_SUPABASE_URL ?? '').trim();
-  const rawKey = (import.meta.env?.VITE_SUPABASE_ANON_KEY ?? '').trim();
+const SUPABASE_KEY_REGEX = /^[\x21-\x7E]{16,}$/;
+
+export function getSupabaseConfig(
+  env: { readonly VITE_SUPABASE_URL?: string; readonly VITE_SUPABASE_ANON_KEY?: string } = import.meta.env ?? {},
+): SupabaseConfig | null {
+  const rawUrl = (env.VITE_SUPABASE_URL ?? '').trim();
+  const rawKey = (env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
   if (!rawUrl || !rawKey) {
     return null;
   }
 
-  if (/\s/.test(rawUrl) || /\s/.test(rawKey)) {
+  if (/\s/.test(rawUrl)) {
     return null;
   }
 
-  if (rawKey.length < 16) {
+  if (!SUPABASE_KEY_REGEX.test(rawKey)) {
     return null;
   }
 
@@ -48,6 +52,17 @@ export function getSupabaseConfig(): SupabaseConfig | null {
   try {
     parsed = new URL(rawUrl);
   } catch {
+    return null;
+  }
+
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    rawUrl.includes('?') ||
+    rawUrl.includes('#')
+  ) {
     return null;
   }
 
@@ -60,7 +75,8 @@ export function getSupabaseConfig(): SupabaseConfig | null {
     return null;
   }
 
-  const url = rawUrl.replace(/\/+$/, '');
+  const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+  const url = `${parsed.origin}${normalizedPath}`;
   return { url, anonKey: rawKey };
 }
 
