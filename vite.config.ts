@@ -66,6 +66,8 @@ export default defineConfig(({ command }) => {
           manualChunks: {
             maplibre: ['maplibre-gl'],
             react: ['react', 'react-dom'],
+            icons: ['lucide-react'],
+            state: ['zustand'],
           },
         },
       },

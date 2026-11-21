@@ -61,7 +61,7 @@ export interface PlaceResult {
   district?: string;
   city?: string;
   state?: string;
-  source: 'photon' | 'curated' | 'gps' | 'map';
+  source: 'photon' | 'nominatim' | 'curated' | 'gps' | 'map';
 }
 
 export interface SurfaceBreakdown {

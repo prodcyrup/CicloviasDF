@@ -191,14 +191,14 @@ export function detectArterialCrossings(coords: Coord3D[]): CrossingWarning[] {
         const crossingAngle = rawDiff > 90 ? 180 - rawDiff : rawDiff;
         if (crossingAngle < 35) continue;
 
-        // Verify the macro ~70m route chord around the intersection actually traverses the corridor
+        // Verify the macro ~90m route chord around the intersection actually traverses the corridor
         const exactDistM = cum[i] + haversineMeters(rA, hit);
-        const beforeCoord = interpolateAlongRoute(coords, cum, Math.max(0, exactDistM - 35)).coord;
-        const afterCoord = interpolateAlongRoute(coords, cum, Math.min(totalDistM, exactDistM + 35)).coord;
+        const beforeCoord = interpolateAlongRoute(coords, cum, Math.max(0, exactDistM - 45)).coord;
+        const afterCoord = interpolateAlongRoute(coords, cum, Math.min(totalDistM, exactDistM + 45)).coord;
         const macroBearing = computeBearingDeg(beforeCoord, afterCoord);
         const macroDiff = Math.abs(normalizeAngleDiff(macroBearing - vBearing));
         const macroAngle = macroDiff > 90 ? 180 - macroDiff : macroDiff;
-        if (macroAngle < 38) continue;
+        if (macroAngle < 42) continue;
 
         // Place visual warning marker ~45m upstream along the route so the rider is alerted BEFORE entering the avenue
         const approachDistM = Math.max(0, exactDistM - 45);
@@ -318,6 +318,21 @@ export function buildLaneSpatialIndex(geojson: GeoJSON.FeatureCollection): void 
   cachedLaneIndex = out;
 }
 
+function pointToSegmentMeters(pt: LngLat, a: LngLat, b: LngLat): number {
+  const cosLat = Math.cos(toRad(pt[1]));
+  const ax = a[0] * cosLat;
+  const ay = a[1];
+  const bx = b[0] * cosLat;
+  const by = b[1];
+  const px = pt[0] * cosLat;
+  const py = pt[1];
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  const t = lenSq > 1e-16 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq)) : 0;
+  return haversineMeters(pt, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+}
+
 export function classifyPointOnBikeNetwork(pt: LngLat, maxMeters = 32): string | null {
   if (cachedLaneIndex.length === 0) return null;
   const pad = 0.0004; // ~44m bbox pad
@@ -336,8 +351,7 @@ export function classifyPointOnBikeNetwork(pt: LngLat, maxMeters = 32): string |
     }
     const pts = lane.coords;
     for (let j = 0; j < pts.length - 1; j++) {
-      const mid: LngLat = [(pts[j][0] + pts[j + 1][0]) * 0.5, (pts[j][1] + pts[j + 1][1]) * 0.5];
-      const d = Math.min(haversineMeters(pt, pts[j]), haversineMeters(pt, mid));
+      const d = pointToSegmentMeters(pt, pts[j], pts[j + 1]);
       if (d < bestDist) {
         bestDist = d;
         bestKind = lane.kind;

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bike,
@@ -35,6 +35,8 @@ export function AdaptiveShell() {
   const [dragHeightPx, setDragHeightPx] = useState<number | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const { isFullscreen, toggleFullscreen } = useFullscreen();
+  const desktopScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileScrollRef = useRef<HTMLDivElement | null>(null);
 
   const dragRef = useRef<{
     active: boolean;
@@ -63,6 +65,12 @@ export function AdaptiveShell() {
   const openHazardReporter = useAppStore((s) => s.openHazardReporter);
   const flyTo = useAppStore((s) => s.flyTo);
   const locateCurrentPosition = useAppStore((s) => s.locateCurrentPosition);
+
+  // Snap scrollable sidebar & mobile bottom sheet cleanly to top when entering/leaving Route Preview
+  useEffect(() => {
+    desktopScrollRef.current?.scrollTo({ top: 0 });
+    mobileScrollRef.current?.scrollTo({ top: 0 });
+  }, [mode]);
 
   const compactVehicleLabel = activeVehicle.name.split(' ')[0];
 
@@ -205,7 +213,7 @@ export function AdaptiveShell() {
             type="button"
             onClick={() => setGarageOpen(true)}
             title={activeVehicle.name}
-            className="glass-panel flex min-w-0 max-w-[92px] select-none items-center gap-1 rounded-2xl px-2.5 py-2 text-xs font-bold text-slate-800 shadow-lg dark:text-slate-100"
+            className="glass-panel flex min-w-0 max-w-[78px] select-none items-center gap-1 rounded-2xl px-2 py-2 text-xs font-bold text-slate-800 shadow-lg dark:text-slate-100 min-[390px]:max-w-[96px] min-[390px]:px-2.5"
           >
             {activeVehicle.isElectric ? (
               <Zap className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -299,7 +307,7 @@ export function AdaptiveShell() {
         </div>
 
         {/* Desktop Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 ev-scroll">
+        <div ref={desktopScrollRef} className="flex-1 overflow-y-auto p-4 ev-scroll">
           {mode === 'preview' ? <RoutePreviewPanel /> : <ExplorePanel />}
         </div>
       </aside>
@@ -417,7 +425,7 @@ export function AdaptiveShell() {
           </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4 ev-scroll">
+        <div ref={mobileScrollRef} className="flex-1 overflow-y-auto px-3 pb-4 ev-scroll min-[390px]:px-4">
           {mode === 'preview' ? <RoutePreviewPanel /> : <ExplorePanel />}
         </div>
       </section>

@@ -343,13 +343,13 @@ export function RoutePreviewPanel() {
             </div>
           )}
 
-          {/* Top Action Toolbar: Ajustar Rota, Parada, Salvar, GPX & Compartilhar — single line */}
+          {/* Top Action Toolbar: Ajustar Rota, Parada, Salvar, GPX & Compartilhar — single line even on 375px iPhone SE */}
           <div className="space-y-2">
             <div className="flex flex-nowrap items-center gap-1 overflow-x-auto ev-scroll">
               <button
                 type="button"
                 onClick={toggleEditWaypoints}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors ${
+                className={`inline-flex shrink-0 items-center gap-1 rounded-xl border px-1.5 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors min-[390px]:px-2 ${
                   isEditingWaypoints
                     ? 'border-sky-600 bg-sky-600 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-sky-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
@@ -362,7 +362,7 @@ export function RoutePreviewPanel() {
               <button
                 type="button"
                 onClick={() => setMapPickTarget('via')}
-                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 min-[390px]:px-2"
               >
                 <Plus className="h-3 w-3 shrink-0" />
                 Parada
@@ -374,7 +374,7 @@ export function RoutePreviewPanel() {
                   setRouteNameInput(activeRoute.destName ? `Rota para ${activeRoute.destName}` : activeRoute.title);
                   setSavingName(true);
                 }}
-                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 min-[390px]:px-2"
               >
                 <Bookmark className="h-3 w-3 shrink-0 text-emerald-600" />
                 Salvar
@@ -384,7 +384,7 @@ export function RoutePreviewPanel() {
                 type="button"
                 onClick={handleExportGpx}
                 title="Exportar GPX"
-                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1.5 text-[11px] font-semibold whitespace-nowrap text-slate-700 hover:border-emerald-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 min-[390px]:px-2"
               >
                 <Download className="h-3 w-3 shrink-0" />
                 GPX
@@ -482,13 +482,13 @@ export function RoutePreviewPanel() {
                   <button
                     type="button"
                     onClick={toggleRoundTrip}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                    className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${
                       isRoundTrip
                         ? 'border-emerald-600 bg-emerald-600 text-white'
                         : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200'
                     }`}
                   >
-                    <Repeat className="h-3 w-3" />
+                    <Repeat className="h-3 w-3 shrink-0" />
                     {isRoundTrip ? 'Ida + Volta' : 'Só Ida'}
                   </button>
                 </div>
